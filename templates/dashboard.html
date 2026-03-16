@@ -42,18 +42,6 @@
       </div>
 
 
-      <div class="col-12">
-        <label class="form-label mb-1">訂單狀態</label>
-        <div class="d-flex flex-wrap gap-3">
-          {% for status in status_options %}
-          <div class="form-check">
-            <input class="form-check-input" type="checkbox" name="status" value="{{ status }}" id="st-{{ status }}"
-              {% if status in selected_statuses %}checked{% endif %}>
-            <label class="form-check-label" for="st-{{ status }}">{{ status }}</label>
-          </div>
-          {% endfor %}
-        </div>
-      </div>
       <div class="col-12 d-grid d-md-flex gap-2">
         <button class="btn btn-primary" type="submit">搜尋</button>
         <a class="btn btn-outline-secondary" href="{{ url_for('dashboard') }}">清除條件</a>
@@ -91,7 +79,8 @@
             <th>轉走日期</th>
             <th>開始日期</th>
             <th>取代日期</th>
-            <th>狀態</th>
+            <th>備註</th>
+            <th>相片</th>
             <th>操作</th>
           </tr>
         </thead>
@@ -114,14 +103,15 @@
             <td>{{ order['transfer_out_date'] }}</td>
             <td>{{ order['start_date'] }}</td>
             <td>{{ order['replacement_date'] }}</td>
+            <td>{{ order['remark'] or '-' }}</td>
             <td>
-              <form method="post" action="{{ url_for('update_status', order_id=order['id'], **request.args.to_dict(flat=False)) }}">
-                <select name="status" class="form-select form-select-sm" onchange="this.form.submit()">
-                  {% for status in status_options %}
-                  <option value="{{ status }}" {% if order['status'] == status %}selected{% endif %}>{{ status }}</option>
-                  {% endfor %}
-                </select>
-              </form>
+              {% if order['photo_path'] %}
+              <a href="{{ url_for('static', filename=order['photo_path']) }}" target="_blank" rel="noopener">
+                <img src="{{ url_for('static', filename=order['photo_path']) }}" alt="訂單相片 {{ order['id'] }}" style="max-width: 80px; max-height: 80px;" class="img-thumbnail">
+              </a>
+              {% else %}
+              <span class="text-muted">無</span>
+              {% endif %}
             </td>
             <td>
               <div class="d-flex gap-2">
@@ -134,7 +124,7 @@
           </tr>
           {% else %}
           <tr>
-            <td colspan="11" class="text-center text-muted py-4">沒有符合條件的記錄。</td>
+            <td colspan="12" class="text-center text-muted py-4">沒有符合條件的記錄。</td>
           </tr>
           {% endfor %}
         </tbody>

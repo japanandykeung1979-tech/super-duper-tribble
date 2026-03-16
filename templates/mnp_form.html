@@ -4,7 +4,7 @@
 <div class="card shadow-sm">
   <div class="card-body">
     <h2 class="h5 mb-3">轉台登記表單</h2>
-    <form method="post" class="row g-3">
+    <form method="post" enctype="multipart/form-data" class="row g-3">
       <div class="col-12 col-md-6">
         <label class="form-label">英文名</label>
         <input type="text" name="english_name" class="form-control" value="{{ form_data.get('english_name', '') }}" required>
@@ -106,7 +106,12 @@
       </div>
       <div class="col-12">
         <label class="form-label">備註 (Remark)</label>
-        <textarea name="remark" class="form-control" rows="3">{{ form_data.get('remark', '') }}</textarea>
+        <textarea name="remark" class="form-control" rows="3" maxlength="100">{{ form_data.get('remark', '') }}</textarea>
+        <div class="form-text">最多 100 字。</div>
+      </div>
+      <div class="col-12">
+        <label class="form-label">上傳相片</label>
+        <input type="file" name="photo" class="form-control" accept="image/*">
       </div>
       <div class="col-12">
         <button type="submit" class="btn btn-primary w-100">提交登記</button>
