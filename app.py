@@ -208,6 +208,36 @@ def fetch_order(order_id: int) -> sqlite3.Row | None:
     return db.execute("SELECT * FROM orders WHERE id = ?", (order_id,)).fetchone()
 
 
+def build_dashboard_order_data(form) -> dict[str, Any]:
+    a_card_number = form.get("a_card_number", "").strip()
+    b_card_number = form.get("b_card_number", "").strip()
+
+    placeholder_name = a_card_number or b_card_number or "Dashboard"
+
+    return {
+        "english_name": f"Dashboard-{placeholder_name}",
+        "chinese_name": "Dashboard新增",
+        "hkid": "N/A",
+        "port_in_number": "N/A",
+        "sim_number": "N/A",
+        "dno": "其他",
+        "card_type": "N/A",
+        "plan": PLAN_OPTIONS[0],
+        "cutover_date": datetime.now().strftime("%Y-%m-%d"),
+        "cutover_time": TIME_OPTIONS[0],
+        "real_name_registration": "否",
+        "a_card_number": a_card_number,
+        "b_card_number": b_card_number,
+        "pps": 1 if form.get("pps") else 0,
+        "ns": 1 if form.get("ns") else 0,
+        "contract_end_date": form.get("contract_end_date", "").strip(),
+        "transfer_out_date": form.get("transfer_out_date", "").strip(),
+        "start_date": form.get("start_date", "").strip(),
+        "replacement_date": form.get("replacement_date", "").strip(),
+        "remark": form.get("remark", "").strip()[:100],
+    }
+
+
 @app.route("/")
 def index():
     if session.get("user"):
@@ -300,9 +330,52 @@ def mnp_form():
     )
 
 
-@app.route("/dashboard")
+@app.route("/dashboard", methods=["GET", "POST"])
 @login_required
 def dashboard():
+    if request.method == "POST":
+        action = request.form.get("action", "search")
+
+        if action == "search":
+            search_params = {
+                "a_card_number": request.form.get("a_card_number", "").strip(),
+                "contract_end_date": request.form.get("contract_end_date", "").strip(),
+                "transfer_out_date": request.form.get("transfer_out_date", "").strip(),
+                "b_card_number": request.form.get("b_card_number", "").strip(),
+                "start_date": request.form.get("start_date", "").strip(),
+                "replacement_date": request.form.get("replacement_date", "").strip(),
+            }
+            if request.form.get("pps"):
+                search_params["pps"] = "1"
+            if request.form.get("ns"):
+                search_params["ns"] = "1"
+
+            cleaned_params = {key: value for key, value in search_params.items() if value}
+            return redirect(url_for("dashboard", **cleaned_params))
+
+        if action == "add":
+            form_data = build_dashboard_order_data(request.form)
+
+            if not form_data["a_card_number"] and not form_data["b_card_number"]:
+                flash("請至少輸入 A咭號碼 或 B咭號碼，才可新增紀錄。", "danger")
+                return redirect(url_for("dashboard", **request.args.to_dict(flat=False)))
+
+            camera_photo = request.files.get("camera_photo")
+            album_photo = request.files.get("album_photo")
+            selected_photo = camera_photo if camera_photo and camera_photo.filename else album_photo
+            form_data["photo_path"] = save_uploaded_photo(selected_photo)
+
+            if selected_photo and selected_photo.filename and not form_data["photo_path"]:
+                flash("相片格式不支援，請上傳圖片檔案。", "danger")
+                return redirect(url_for("dashboard", **request.args.to_dict(flat=False)))
+
+            insert_order(form_data)
+            flash("已從 Dashboard 新增紀錄。", "success")
+            return redirect(url_for("dashboard", **request.args.to_dict(flat=False)))
+
+        flash("不支援的操作。", "danger")
+        return redirect(url_for("dashboard", **request.args.to_dict(flat=False)))
+
     query, params = build_order_filters(request.args)
 
     db = get_db()
