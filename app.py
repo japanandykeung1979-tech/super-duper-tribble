@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import os
 import sqlite3
+from csv import DictWriter
 from datetime import datetime
 from functools import wraps
+from io import StringIO
 from pathlib import Path
 from typing import Any
+from xml.sax.saxutils import escape
 
-from flask import Flask, flash, g, redirect, render_template, request, session, url_for
+from flask import Flask, flash, g, redirect, render_template, request, session, url_for, Response
 
 BASE_DIR = Path(__file__).resolve().parent
 DATABASE = BASE_DIR / "crm.db"
@@ -105,6 +108,42 @@ def insert_order(data: dict[str, Any]) -> None:
     db.commit()
 
 
+def build_order_filters(args) -> tuple[str, list[Any], list[str]]:
+    query = "SELECT * FROM orders WHERE 1=1"
+    params: list[Any] = []
+
+    port_in_number = args.get("port_in_number", "").strip()
+    sim_number = args.get("sim_number", "").strip()
+    start_date = args.get("start_date", "").strip()
+    end_date = args.get("end_date", "").strip()
+    statuses = [status for status in args.getlist("status") if status in STATUS_OPTIONS]
+
+    if port_in_number:
+        query += " AND port_in_number LIKE ?"
+        params.append(f"%{port_in_number}%")
+    if sim_number:
+        query += " AND sim_number LIKE ?"
+        params.append(f"%{sim_number}%")
+    if start_date:
+        query += " AND cutover_date >= ?"
+        params.append(start_date)
+    if end_date:
+        query += " AND cutover_date <= ?"
+        params.append(end_date)
+    if statuses:
+        placeholders = ",".join("?" * len(statuses))
+        query += f" AND status IN ({placeholders})"
+        params.extend(statuses)
+
+    query += " ORDER BY created_at DESC"
+    return query, params, statuses
+
+
+def fetch_order(order_id: int) -> sqlite3.Row | None:
+    db = get_db()
+    return db.execute("SELECT * FROM orders WHERE id = ?", (order_id,)).fetchone()
+
+
 @app.route("/")
 def index():
     if session.get("user"):
@@ -180,33 +219,7 @@ def mnp_form():
 @app.route("/dashboard")
 @login_required
 def dashboard():
-    port_in_number = request.args.get("port_in_number", "").strip()
-    sim_number = request.args.get("sim_number", "").strip()
-    start_date = request.args.get("start_date", "").strip()
-    end_date = request.args.get("end_date", "").strip()
-    statuses = request.args.getlist("status")
-
-    query = "SELECT * FROM orders WHERE 1=1"
-    params: list[Any] = []
-
-    if port_in_number:
-        query += " AND port_in_number LIKE ?"
-        params.append(f"%{port_in_number}%")
-    if sim_number:
-        query += " AND sim_number LIKE ?"
-        params.append(f"%{sim_number}%")
-    if start_date:
-        query += " AND cutover_date >= ?"
-        params.append(start_date)
-    if end_date:
-        query += " AND cutover_date <= ?"
-        params.append(end_date)
-    if statuses:
-        placeholders = ",".join("?" * len(statuses))
-        query += f" AND status IN ({placeholders})"
-        params.extend(statuses)
-
-    query += " ORDER BY created_at DESC"
+    query, params, statuses = build_order_filters(request.args)
 
     db = get_db()
     orders = db.execute(query, params).fetchall()
@@ -217,6 +230,185 @@ def dashboard():
         status_options=STATUS_OPTIONS,
         selected_statuses=statuses,
     )
+
+
+@app.get("/dashboard/export")
+@login_required
+def export_orders():
+    export_format = request.args.get("format", "csv").lower()
+    if export_format not in {"csv", "excel"}:
+        flash("匯出格式不支援。", "danger")
+        return redirect(url_for("dashboard", **request.args))
+
+    query, params, _statuses = build_order_filters(request.args)
+    db = get_db()
+    orders = db.execute(query, params).fetchall()
+
+    columns = [
+        ("id", "ID"),
+        ("english_name", "English Name"),
+        ("chinese_name", "Chinese Name"),
+        ("hkid", "HKID"),
+        ("port_in_number", "Port-in Number"),
+        ("sim_number", "SIM Number"),
+        ("dno", "DNO"),
+        ("card_type", "Card Type"),
+        ("plan", "Plan"),
+        ("cutover_date", "Cutover Date"),
+        ("cutover_time", "Cutover Time"),
+        ("real_name_registration", "Real Name Registration"),
+        ("remark", "Remark"),
+        ("status", "Status"),
+        ("created_at", "Created At"),
+    ]
+    filename_time = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    if export_format == "csv":
+        output = StringIO()
+        writer = DictWriter(output, fieldnames=[label for _field, label in columns])
+        writer.writeheader()
+        for order in orders:
+            writer.writerow({label: order[field] for field, label in columns})
+
+        csv_text = output.getvalue()
+        return Response(
+            csv_text,
+            mimetype="text/csv; charset=utf-8",
+            headers={
+                "Content-Disposition": f"attachment; filename=orders_{filename_time}.csv",
+            },
+        )
+
+    rows = [
+        "<?xml version=\"1.0\"?>",
+        '<?mso-application progid="Excel.Sheet"?>',
+        '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"',
+        ' xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">',
+        '<Worksheet ss:Name="Orders"><Table>',
+        "<Row>",
+    ]
+    for _field, label in columns:
+        rows.append(f"<Cell><Data ss:Type=\"String\">{escape(label)}</Data></Cell>")
+    rows.append("</Row>")
+    for order in orders:
+        rows.append("<Row>")
+        for field, _label in columns:
+            value = "" if order[field] is None else str(order[field])
+            rows.append(f"<Cell><Data ss:Type=\"String\">{escape(value)}</Data></Cell>")
+        rows.append("</Row>")
+    rows.extend(["</Table></Worksheet>", "</Workbook>"])
+
+    return Response(
+        "\n".join(rows),
+        mimetype="application/vnd.ms-excel",
+        headers={
+            "Content-Disposition": f"attachment; filename=orders_{filename_time}.xls",
+        },
+    )
+
+
+@app.route("/orders/<int:order_id>/edit", methods=["GET", "POST"])
+@login_required
+def edit_order(order_id: int):
+    order = fetch_order(order_id)
+    if order is None:
+        flash("找不到該筆訂單。", "danger")
+        return redirect(url_for("dashboard"))
+
+    if request.method == "POST":
+        required_fields = [
+            "english_name",
+            "chinese_name",
+            "hkid",
+            "port_in_number",
+            "sim_number",
+            "dno",
+            "card_type",
+            "plan",
+            "cutover_date",
+            "cutover_time",
+            "real_name_registration",
+            "status",
+        ]
+        form_data = {field: request.form.get(field, "").strip() for field in required_fields}
+        form_data["remark"] = request.form.get("remark", "").strip()
+        missing = [field for field in required_fields if not form_data[field]]
+
+        if form_data["status"] not in STATUS_OPTIONS:
+            missing.append("status")
+        if form_data["dno"] not in DNO_OPTIONS:
+            missing.append("dno")
+        if form_data["plan"] not in PLAN_OPTIONS:
+            missing.append("plan")
+        if form_data["cutover_time"] not in TIME_OPTIONS:
+            missing.append("cutover_time")
+        if form_data["real_name_registration"] not in {"是", "否"}:
+            missing.append("real_name_registration")
+
+        if missing:
+            flash("資料不完整或包含無效欄位，請檢查後重試。", "danger")
+            return render_template(
+                "edit_order.html",
+                order=form_data,
+                order_id=order_id,
+                dno_options=DNO_OPTIONS,
+                plan_options=PLAN_OPTIONS,
+                time_options=TIME_OPTIONS,
+                status_options=STATUS_OPTIONS,
+            )
+
+        db = get_db()
+        db.execute(
+            """
+            UPDATE orders
+            SET english_name = ?, chinese_name = ?, hkid = ?, port_in_number = ?, sim_number = ?,
+                dno = ?, card_type = ?, plan = ?, cutover_date = ?, cutover_time = ?,
+                real_name_registration = ?, remark = ?, status = ?
+            WHERE id = ?
+            """,
+            (
+                form_data["english_name"],
+                form_data["chinese_name"],
+                form_data["hkid"],
+                form_data["port_in_number"],
+                form_data["sim_number"],
+                form_data["dno"],
+                form_data["card_type"],
+                form_data["plan"],
+                form_data["cutover_date"],
+                form_data["cutover_time"],
+                form_data["real_name_registration"],
+                form_data["remark"],
+                form_data["status"],
+                order_id,
+            ),
+        )
+        db.commit()
+        flash("訂單資料已更新。", "success")
+        return redirect(url_for("dashboard"))
+
+    return render_template(
+        "edit_order.html",
+        order=order,
+        order_id=order_id,
+        dno_options=DNO_OPTIONS,
+        plan_options=PLAN_OPTIONS,
+        time_options=TIME_OPTIONS,
+        status_options=STATUS_OPTIONS,
+    )
+
+
+@app.post("/orders/<int:order_id>/delete")
+@login_required
+def delete_order(order_id: int):
+    db = get_db()
+    cursor = db.execute("DELETE FROM orders WHERE id = ?", (order_id,))
+    db.commit()
+    if cursor.rowcount:
+        flash("訂單已刪除。", "success")
+    else:
+        flash("找不到要刪除的訂單。", "danger")
+    return redirect(url_for("dashboard", **request.args.to_dict(flat=False)))
 
 
 @app.post("/dashboard/update_status/<int:order_id>")

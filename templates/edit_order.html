@@ -1,0 +1,86 @@
+{% extends 'base.html' %}
+{% block title %}編輯訂單 - Telecom CRM{% endblock %}
+{% block content %}
+<div class="card shadow-sm">
+  <div class="card-body">
+    <h2 class="h5 mb-3">編輯訂單 #{{ order_id }}</h2>
+    <form method="post" class="row g-3">
+      <div class="col-12 col-md-6">
+        <label class="form-label">英文名</label>
+        <input type="text" name="english_name" class="form-control" value="{{ order['english_name'] }}" required>
+      </div>
+      <div class="col-12 col-md-6">
+        <label class="form-label">中文名</label>
+        <input type="text" name="chinese_name" class="form-control" value="{{ order['chinese_name'] }}" required>
+      </div>
+      <div class="col-12 col-md-6">
+        <label class="form-label">HKID</label>
+        <input type="text" name="hkid" class="form-control" value="{{ order['hkid'] }}" required>
+      </div>
+      <div class="col-12 col-md-6">
+        <label class="form-label">轉台號碼 (Port-in Number)</label>
+        <input type="text" name="port_in_number" class="form-control" value="{{ order['port_in_number'] }}" required>
+      </div>
+      <div class="col-12 col-md-6">
+        <label class="form-label">SIM Number</label>
+        <input type="text" name="sim_number" class="form-control" value="{{ order['sim_number'] }}" required>
+      </div>
+      <div class="col-12 col-md-6">
+        <label class="form-label">DNO</label>
+        <select name="dno" class="form-select" required>
+          {% for dno in dno_options %}
+          <option value="{{ dno }}" {% if order['dno'] == dno %}selected{% endif %}>{{ dno }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-12 col-md-6">
+        <label class="form-label">Card Type</label>
+        <input type="text" name="card_type" class="form-control" value="{{ order['card_type'] }}" required>
+      </div>
+      <div class="col-12 col-md-6">
+        <label class="form-label">Plan</label>
+        <select name="plan" class="form-select" required>
+          {% for plan in plan_options %}
+          <option value="{{ plan }}" {% if order['plan'] == plan %}selected{% endif %}>{{ plan }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-12 col-md-6">
+        <label class="form-label">Cutover Date</label>
+        <input type="date" name="cutover_date" class="form-control" value="{{ order['cutover_date'] }}" required>
+      </div>
+      <div class="col-12 col-md-6">
+        <label class="form-label">Cutover Time</label>
+        <select name="cutover_time" class="form-select" required>
+          {% for time in time_options %}
+          <option value="{{ time }}" {% if order['cutover_time'] == time %}selected{% endif %}>{{ time }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-12 col-md-6">
+        <label class="form-label">代登記實名</label>
+        <select name="real_name_registration" class="form-select" required>
+          <option value="是" {% if order['real_name_registration'] == '是' %}selected{% endif %}>是</option>
+          <option value="否" {% if order['real_name_registration'] == '否' %}selected{% endif %}>否</option>
+        </select>
+      </div>
+      <div class="col-12 col-md-6">
+        <label class="form-label">狀態</label>
+        <select name="status" class="form-select" required>
+          {% for status in status_options %}
+          <option value="{{ status }}" {% if order['status'] == status %}selected{% endif %}>{{ status }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-12">
+        <label class="form-label">備註 (Remark)</label>
+        <textarea name="remark" class="form-control" rows="3">{{ order['remark'] }}</textarea>
+      </div>
+      <div class="col-12 d-flex gap-2">
+        <button type="submit" class="btn btn-primary">儲存變更</button>
+        <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">返回 Dashboard</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
