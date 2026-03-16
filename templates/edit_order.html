@@ -64,17 +64,10 @@
           <option value="否" {% if order['real_name_registration'] == '否' %}selected{% endif %}>否</option>
         </select>
       </div>
-      <div class="col-12 col-md-6">
-        <label class="form-label">狀態</label>
-        <select name="status" class="form-select" required>
-          {% for status in status_options %}
-          <option value="{{ status }}" {% if order['status'] == status %}selected{% endif %}>{{ status }}</option>
-          {% endfor %}
-        </select>
-      </div>
       <div class="col-12">
         <label class="form-label">備註 (Remark)</label>
-        <textarea name="remark" class="form-control" rows="3">{{ order['remark'] }}</textarea>
+        <textarea name="remark" class="form-control" rows="3" maxlength="100">{{ order['remark'] }}</textarea>
+        <div class="form-text">最多 100 字。</div>
       </div>
       <div class="col-12 d-flex gap-2">
         <button type="submit" class="btn btn-primary">儲存變更</button>

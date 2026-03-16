@@ -8,9 +8,11 @@ from functools import wraps
 from io import StringIO
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 from xml.sax.saxutils import escape
 
 from flask import Flask, flash, g, redirect, render_template, request, session, url_for, Response
+from werkzeug.utils import secure_filename
 
 BASE_DIR = Path(__file__).resolve().parent
 DATABASE = BASE_DIR / "crm.db"
@@ -20,8 +22,9 @@ app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-secret-key-change-m
 
 DNO_OPTIONS = ["CMHK", "CSL", "SmarTone", "3HK", "HKBN", "其他"]
 PLAN_OPTIONS = ["5G Basic", "5G Premium", "4.5G Value", "Family Plan", "Data SIM"]
-STATUS_OPTIONS = ["New", "Processing", "Invalid", "Reject", "Success"]
 TIME_OPTIONS = ["AM", "PM"]
+UPLOAD_FOLDER = BASE_DIR / "static" / "uploads"
+ALLOWED_IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp", "bmp", "heic", "heif"}
 
 DEMO_USER = os.environ.get("CRM_USERNAME", "admin")
 DEMO_PASSWORD = os.environ.get("CRM_PASSWORD", "password123")
@@ -52,7 +55,7 @@ def init_db() -> None:
             cutover_time TEXT NOT NULL,
             real_name_registration TEXT NOT NULL,
             remark TEXT,
-            status TEXT NOT NULL DEFAULT 'New',
+            photo_path TEXT,
             created_at TEXT NOT NULL
         )
         """
@@ -70,6 +73,8 @@ def init_db() -> None:
         "transfer_out_date": "TEXT",
         "start_date": "TEXT",
         "replacement_date": "TEXT",
+        "remark": "TEXT",
+        "photo_path": "TEXT",
     }
     for column, column_type in required_columns.items():
         if column not in existing_columns:
@@ -103,7 +108,7 @@ def insert_order(data: dict[str, Any]) -> None:
         INSERT INTO orders (
             english_name, chinese_name, hkid, port_in_number, sim_number,
             dno, card_type, plan, cutover_date, cutover_time,
-            real_name_registration, remark, status, created_at,
+            real_name_registration, remark, photo_path, created_at,
             a_card_number, b_card_number, pps, ns,
             contract_end_date, transfer_out_date, start_date, replacement_date
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -121,7 +126,7 @@ def insert_order(data: dict[str, Any]) -> None:
             data["cutover_time"],
             data["real_name_registration"],
             data.get("remark", ""),
-            "New",
+            data.get("photo_path", ""),
             datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             data.get("a_card_number", ""),
             data.get("b_card_number", ""),
@@ -136,7 +141,7 @@ def insert_order(data: dict[str, Any]) -> None:
     db.commit()
 
 
-def build_order_filters(args) -> tuple[str, list[Any], list[str]]:
+def build_order_filters(args) -> tuple[str, list[Any]]:
     query = "SELECT * FROM orders WHERE 1=1"
     params: list[Any] = []
 
@@ -149,7 +154,6 @@ def build_order_filters(args) -> tuple[str, list[Any], list[str]]:
     replacement_date = args.get("replacement_date", "").strip()
     pps = args.get("pps") == "1"
     ns = args.get("ns") == "1"
-    statuses = [status for status in args.getlist("status") if status in STATUS_OPTIONS]
 
     if port_in_number:
         query += " AND port_in_number LIKE ?"
@@ -176,13 +180,27 @@ def build_order_filters(args) -> tuple[str, list[Any], list[str]]:
     if replacement_date:
         query += " AND replacement_date <= ?"
         params.append(replacement_date)
-    if statuses:
-        placeholders = ",".join("?" * len(statuses))
-        query += f" AND status IN ({placeholders})"
-        params.extend(statuses)
-
     query += " ORDER BY created_at DESC"
-    return query, params, statuses
+    return query, params
+
+
+def save_uploaded_photo(uploaded_file) -> str:
+    if not uploaded_file or not uploaded_file.filename:
+        return ""
+
+    filename = secure_filename(uploaded_file.filename)
+    if not filename:
+        return ""
+
+    extension = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if extension not in ALLOWED_IMAGE_EXTENSIONS:
+        return ""
+
+    UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
+    unique_name = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid4().hex}.{extension}"
+    destination = UPLOAD_FOLDER / unique_name
+    uploaded_file.save(destination)
+    return str(Path("uploads") / unique_name)
 
 
 def fetch_order(order_id: int) -> sqlite3.Row | None:
@@ -242,9 +260,21 @@ def mnp_form():
             "replacement_date",
         ]
         form_data = {field: request.form.get(field, "").strip() for field in required_fields}
-        form_data["remark"] = request.form.get("remark", "").strip()
+        form_data["remark"] = request.form.get("remark", "").strip()[:100]
         form_data["pps"] = 1 if request.form.get("pps") else 0
         form_data["ns"] = 1 if request.form.get("ns") else 0
+
+        uploaded_photo = request.files.get("photo")
+        form_data["photo_path"] = save_uploaded_photo(uploaded_photo)
+        if uploaded_photo and uploaded_photo.filename and not form_data["photo_path"]:
+            flash("相片格式不支援，請上傳圖片檔案。", "danger")
+            return render_template(
+                "mnp_form.html",
+                dno_options=DNO_OPTIONS,
+                plan_options=PLAN_OPTIONS,
+                time_options=TIME_OPTIONS,
+                form_data=form_data,
+            )
 
         missing = [field for field, value in form_data.items() if field in required_fields and not value]
         if missing:
@@ -273,7 +303,7 @@ def mnp_form():
 @app.route("/dashboard")
 @login_required
 def dashboard():
-    query, params, statuses = build_order_filters(request.args)
+    query, params = build_order_filters(request.args)
 
     db = get_db()
     orders = db.execute(query, params).fetchall()
@@ -281,8 +311,6 @@ def dashboard():
     return render_template(
         "dashboard.html",
         orders=orders,
-        status_options=STATUS_OPTIONS,
-        selected_statuses=statuses,
     )
 
 
@@ -294,7 +322,7 @@ def export_orders():
         flash("匯出格式不支援。", "danger")
         return redirect(url_for("dashboard", **request.args))
 
-    query, params, _statuses = build_order_filters(request.args)
+    query, params = build_order_filters(request.args)
     db = get_db()
     orders = db.execute(query, params).fetchall()
 
@@ -320,7 +348,7 @@ def export_orders():
         ("cutover_time", "Cutover Time"),
         ("real_name_registration", "Real Name Registration"),
         ("remark", "Remark"),
-        ("status", "Status"),
+        ("photo_path", "Photo Path"),
         ("created_at", "Created At"),
     ]
     filename_time = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -390,14 +418,11 @@ def edit_order(order_id: int):
             "cutover_date",
             "cutover_time",
             "real_name_registration",
-            "status",
         ]
         form_data = {field: request.form.get(field, "").strip() for field in required_fields}
-        form_data["remark"] = request.form.get("remark", "").strip()
+        form_data["remark"] = request.form.get("remark", "").strip()[:100]
         missing = [field for field in required_fields if not form_data[field]]
 
-        if form_data["status"] not in STATUS_OPTIONS:
-            missing.append("status")
         if form_data["dno"] not in DNO_OPTIONS:
             missing.append("dno")
         if form_data["plan"] not in PLAN_OPTIONS:
@@ -416,7 +441,6 @@ def edit_order(order_id: int):
                 dno_options=DNO_OPTIONS,
                 plan_options=PLAN_OPTIONS,
                 time_options=TIME_OPTIONS,
-                status_options=STATUS_OPTIONS,
             )
 
         db = get_db()
@@ -425,7 +449,7 @@ def edit_order(order_id: int):
             UPDATE orders
             SET english_name = ?, chinese_name = ?, hkid = ?, port_in_number = ?, sim_number = ?,
                 dno = ?, card_type = ?, plan = ?, cutover_date = ?, cutover_time = ?,
-                real_name_registration = ?, remark = ?, status = ?
+                real_name_registration = ?, remark = ?
             WHERE id = ?
             """,
             (
@@ -441,7 +465,6 @@ def edit_order(order_id: int):
                 form_data["cutover_time"],
                 form_data["real_name_registration"],
                 form_data["remark"],
-                form_data["status"],
                 order_id,
             ),
         )
@@ -456,7 +479,6 @@ def edit_order(order_id: int):
         dno_options=DNO_OPTIONS,
         plan_options=PLAN_OPTIONS,
         time_options=TIME_OPTIONS,
-        status_options=STATUS_OPTIONS,
     )
 
 
@@ -471,21 +493,6 @@ def delete_order(order_id: int):
     else:
         flash("找不到要刪除的訂單。", "danger")
     return redirect(url_for("dashboard", **request.args.to_dict(flat=False)))
-
-
-@app.post("/dashboard/update_status/<int:order_id>")
-@login_required
-def update_status(order_id: int):
-    new_status = request.form.get("status", "").strip()
-    if new_status not in STATUS_OPTIONS:
-        flash("無效的狀態。", "danger")
-        return redirect(url_for("dashboard"))
-
-    db = get_db()
-    db.execute("UPDATE orders SET status = ? WHERE id = ?", (new_status, order_id))
-    db.commit()
-    flash("訂單狀態已更新。", "success")
-    return redirect(url_for("dashboard", **request.args))
 
 
 init_db()
