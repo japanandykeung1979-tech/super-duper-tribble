@@ -1,0 +1,81 @@
+{% extends 'base.html' %}
+{% block title %}MNP Form - Telecom CRM{% endblock %}
+{% block content %}
+<div class="card shadow-sm">
+  <div class="card-body">
+    <h2 class="h5 mb-3">轉台登記表單</h2>
+    <form method="post" class="row g-3">
+      <div class="col-12 col-md-6">
+        <label class="form-label">英文名</label>
+        <input type="text" name="english_name" class="form-control" value="{{ form_data.get('english_name', '') }}" required>
+      </div>
+      <div class="col-12 col-md-6">
+        <label class="form-label">中文名</label>
+        <input type="text" name="chinese_name" class="form-control" value="{{ form_data.get('chinese_name', '') }}" required>
+      </div>
+      <div class="col-12 col-md-6">
+        <label class="form-label">HKID</label>
+        <input type="text" name="hkid" class="form-control" value="{{ form_data.get('hkid', '') }}" required>
+      </div>
+      <div class="col-12 col-md-6">
+        <label class="form-label">轉台號碼 (Port-in Number)</label>
+        <input type="text" name="port_in_number" class="form-control" value="{{ form_data.get('port_in_number', '') }}" required>
+      </div>
+      <div class="col-12 col-md-6">
+        <label class="form-label">SIM Number</label>
+        <input type="text" name="sim_number" class="form-control" value="{{ form_data.get('sim_number', '') }}" required>
+      </div>
+      <div class="col-12 col-md-6">
+        <label class="form-label">DNO</label>
+        <select name="dno" class="form-select" required>
+          <option value="">請選擇</option>
+          {% for dno in dno_options %}
+          <option value="{{ dno }}" {% if form_data.get('dno') == dno %}selected{% endif %}>{{ dno }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-12 col-md-6">
+        <label class="form-label">Card Type</label>
+        <input type="text" name="card_type" class="form-control" value="{{ form_data.get('card_type', '') }}" required>
+      </div>
+      <div class="col-12 col-md-6">
+        <label class="form-label">Plan</label>
+        <select name="plan" class="form-select" required>
+          <option value="">請選擇</option>
+          {% for plan in plan_options %}
+          <option value="{{ plan }}" {% if form_data.get('plan') == plan %}selected{% endif %}>{{ plan }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-12 col-md-6">
+        <label class="form-label">Cutover Date</label>
+        <input type="date" name="cutover_date" class="form-control" value="{{ form_data.get('cutover_date', '') }}" required>
+      </div>
+      <div class="col-12 col-md-6">
+        <label class="form-label">Cutover Time</label>
+        <select name="cutover_time" class="form-select" required>
+          <option value="">請選擇</option>
+          {% for time in time_options %}
+          <option value="{{ time }}" {% if form_data.get('cutover_time') == time %}selected{% endif %}>{{ time }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-12 col-md-6">
+        <label class="form-label">代登記實名</label>
+        <select name="real_name_registration" class="form-select" required>
+          <option value="">請選擇</option>
+          <option value="是" {% if form_data.get('real_name_registration') == '是' %}selected{% endif %}>是</option>
+          <option value="否" {% if form_data.get('real_name_registration') == '否' %}selected{% endif %}>否</option>
+        </select>
+      </div>
+      <div class="col-12">
+        <label class="form-label">備註 (Remark)</label>
+        <textarea name="remark" class="form-control" rows="3">{{ form_data.get('remark', '') }}</textarea>
+      </div>
+      <div class="col-12">
+        <button type="submit" class="btn btn-primary w-100">提交登記</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
