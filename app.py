@@ -57,6 +57,24 @@ def init_db() -> None:
         )
         """
     )
+
+    existing_columns = {
+        row[1] for row in db.execute("PRAGMA table_info(orders)").fetchall()
+    }
+    required_columns = {
+        "a_card_number": "TEXT",
+        "b_card_number": "TEXT",
+        "pps": "INTEGER NOT NULL DEFAULT 0",
+        "ns": "INTEGER NOT NULL DEFAULT 0",
+        "contract_end_date": "TEXT",
+        "transfer_out_date": "TEXT",
+        "start_date": "TEXT",
+        "replacement_date": "TEXT",
+    }
+    for column, column_type in required_columns.items():
+        if column not in existing_columns:
+            db.execute(f"ALTER TABLE orders ADD COLUMN {column} {column_type}")
+
     db.commit()
     db.close()
 
@@ -85,8 +103,10 @@ def insert_order(data: dict[str, Any]) -> None:
         INSERT INTO orders (
             english_name, chinese_name, hkid, port_in_number, sim_number,
             dno, card_type, plan, cutover_date, cutover_time,
-            real_name_registration, remark, status, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            real_name_registration, remark, status, created_at,
+            a_card_number, b_card_number, pps, ns,
+            contract_end_date, transfer_out_date, start_date, replacement_date
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             data["english_name"],
@@ -103,6 +123,14 @@ def insert_order(data: dict[str, Any]) -> None:
             data.get("remark", ""),
             "New",
             datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            data.get("a_card_number", ""),
+            data.get("b_card_number", ""),
+            data.get("pps", 0),
+            data.get("ns", 0),
+            data.get("contract_end_date", ""),
+            data.get("transfer_out_date", ""),
+            data.get("start_date", ""),
+            data.get("replacement_date", ""),
         ),
     )
     db.commit()
@@ -113,23 +141,41 @@ def build_order_filters(args) -> tuple[str, list[Any], list[str]]:
     params: list[Any] = []
 
     port_in_number = args.get("port_in_number", "").strip()
-    sim_number = args.get("sim_number", "").strip()
+    a_card_number = args.get("a_card_number", "").strip()
+    b_card_number = args.get("b_card_number", "").strip()
+    contract_end_date = args.get("contract_end_date", "").strip()
+    transfer_out_date = args.get("transfer_out_date", "").strip()
     start_date = args.get("start_date", "").strip()
-    end_date = args.get("end_date", "").strip()
+    replacement_date = args.get("replacement_date", "").strip()
+    pps = args.get("pps") == "1"
+    ns = args.get("ns") == "1"
     statuses = [status for status in args.getlist("status") if status in STATUS_OPTIONS]
 
     if port_in_number:
         query += " AND port_in_number LIKE ?"
         params.append(f"%{port_in_number}%")
-    if sim_number:
-        query += " AND sim_number LIKE ?"
-        params.append(f"%{sim_number}%")
+    if a_card_number:
+        query += " AND a_card_number LIKE ?"
+        params.append(f"%{a_card_number}%")
+    if b_card_number:
+        query += " AND b_card_number LIKE ?"
+        params.append(f"%{b_card_number}%")
+    if pps:
+        query += " AND pps = 1"
+    if ns:
+        query += " AND ns = 1"
+    if contract_end_date:
+        query += " AND contract_end_date = ?"
+        params.append(contract_end_date)
+    if transfer_out_date:
+        query += " AND transfer_out_date = ?"
+        params.append(transfer_out_date)
     if start_date:
-        query += " AND cutover_date >= ?"
+        query += " AND start_date >= ?"
         params.append(start_date)
-    if end_date:
-        query += " AND cutover_date <= ?"
-        params.append(end_date)
+    if replacement_date:
+        query += " AND replacement_date <= ?"
+        params.append(replacement_date)
     if statuses:
         placeholders = ",".join("?" * len(statuses))
         query += f" AND status IN ({placeholders})"
@@ -188,9 +234,17 @@ def mnp_form():
             "cutover_date",
             "cutover_time",
             "real_name_registration",
+            "a_card_number",
+            "b_card_number",
+            "contract_end_date",
+            "transfer_out_date",
+            "start_date",
+            "replacement_date",
         ]
         form_data = {field: request.form.get(field, "").strip() for field in required_fields}
         form_data["remark"] = request.form.get("remark", "").strip()
+        form_data["pps"] = 1 if request.form.get("pps") else 0
+        form_data["ns"] = 1 if request.form.get("ns") else 0
 
         missing = [field for field, value in form_data.items() if field in required_fields and not value]
         if missing:
@@ -251,6 +305,14 @@ def export_orders():
         ("hkid", "HKID"),
         ("port_in_number", "Port-in Number"),
         ("sim_number", "SIM Number"),
+        ("a_card_number", "A Card Number"),
+        ("b_card_number", "B Card Number"),
+        ("pps", "PPS"),
+        ("ns", "NS"),
+        ("contract_end_date", "3HK Contract End Date"),
+        ("transfer_out_date", "Transfer Out Date"),
+        ("start_date", "Start Date"),
+        ("replacement_date", "Replacement Date"),
         ("dno", "DNO"),
         ("card_type", "Card Type"),
         ("plan", "Plan"),

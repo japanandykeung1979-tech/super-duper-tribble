@@ -6,21 +6,41 @@
     <h2 class="h5 mb-3">搜尋與管理</h2>
     <form method="get" class="row g-3 align-items-end">
       <div class="col-12 col-md-4">
-        <label class="form-label">轉台號碼</label>
-        <input type="text" class="form-control" name="port_in_number" value="{{ request.args.get('port_in_number','') }}">
+        <label class="form-label">A咭號碼</label>
+        <input type="text" class="form-control" name="a_card_number" value="{{ request.args.get('a_card_number','') }}">
       </div>
       <div class="col-12 col-md-4">
-        <label class="form-label">SIM 卡號碼</label>
-        <input type="text" class="form-control" name="sim_number" value="{{ request.args.get('sim_number','') }}">
+        <label class="form-label">3HK合約完結日</label>
+        <input type="date" class="form-control" name="contract_end_date" value="{{ request.args.get('contract_end_date','') }}">
       </div>
-      <div class="col-6 col-md-2">
+      <div class="col-12 col-md-4">
+        <label class="form-label">轉走日期</label>
+        <input type="date" class="form-control" name="transfer_out_date" value="{{ request.args.get('transfer_out_date','') }}">
+      </div>
+
+      <div class="col-12 col-md-4">
+        <label class="form-label">B咭號碼</label>
+        <input type="text" class="form-control" name="b_card_number" value="{{ request.args.get('b_card_number','') }}">
+        <div class="mt-2 d-flex gap-3">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" name="pps" value="1" id="search-pps" {% if request.args.get('pps') == '1' %}checked{% endif %}>
+            <label class="form-check-label" for="search-pps">PPS</label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" name="ns" value="1" id="search-ns" {% if request.args.get('ns') == '1' %}checked{% endif %}>
+            <label class="form-check-label" for="search-ns">ns</label>
+          </div>
+        </div>
+      </div>
+      <div class="col-12 col-md-4">
         <label class="form-label">開始日期</label>
         <input type="date" class="form-control" name="start_date" value="{{ request.args.get('start_date','') }}">
       </div>
-      <div class="col-6 col-md-2">
-        <label class="form-label">結束日期</label>
-        <input type="date" class="form-control" name="end_date" value="{{ request.args.get('end_date','') }}">
+      <div class="col-12 col-md-4">
+        <label class="form-label">取代日期</label>
+        <input type="date" class="form-control" name="replacement_date" value="{{ request.args.get('replacement_date','') }}">
       </div>
+
 
       <div class="col-12">
         <label class="form-label mb-1">訂單狀態</label>
@@ -65,10 +85,12 @@
             <th>ID</th>
             <th>客戶姓名</th>
             <th>Port-in</th>
-            <th>SIM</th>
-            <th>DNO</th>
-            <th>Plan</th>
-            <th>Cutover</th>
+            <th>A咭</th>
+            <th>B咭</th>
+            <th>3HK合約完結日</th>
+            <th>轉走日期</th>
+            <th>開始日期</th>
+            <th>取代日期</th>
             <th>狀態</th>
             <th>操作</th>
           </tr>
@@ -82,10 +104,16 @@
               <small class="text-muted">{{ order['chinese_name'] }}</small>
             </td>
             <td>{{ order['port_in_number'] }}</td>
-            <td>{{ order['sim_number'] }}</td>
-            <td>{{ order['dno'] }}</td>
-            <td>{{ order['plan'] }}</td>
-            <td>{{ order['cutover_date'] }} {{ order['cutover_time'] }}</td>
+            <td>{{ order['a_card_number'] }}</td>
+            <td>
+              {{ order['b_card_number'] }}
+              {% if order['pps'] %}<span class="badge text-bg-info ms-1">PPS</span>{% endif %}
+              {% if order['ns'] %}<span class="badge text-bg-secondary ms-1">ns</span>{% endif %}
+            </td>
+            <td>{{ order['contract_end_date'] }}</td>
+            <td>{{ order['transfer_out_date'] }}</td>
+            <td>{{ order['start_date'] }}</td>
+            <td>{{ order['replacement_date'] }}</td>
             <td>
               <form method="post" action="{{ url_for('update_status', order_id=order['id'], **request.args.to_dict(flat=False)) }}">
                 <select name="status" class="form-select form-select-sm" onchange="this.form.submit()">
@@ -106,7 +134,7 @@
           </tr>
           {% else %}
           <tr>
-            <td colspan="9" class="text-center text-muted py-4">沒有符合條件的記錄。</td>
+            <td colspan="11" class="text-center text-muted py-4">沒有符合條件的記錄。</td>
           </tr>
           {% endfor %}
         </tbody>

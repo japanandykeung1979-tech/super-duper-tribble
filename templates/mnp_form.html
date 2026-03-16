@@ -60,6 +60,42 @@
           {% endfor %}
         </select>
       </div>
+
+      <div class="col-12 col-md-6">
+        <label class="form-label">A咭號碼</label>
+        <input type="text" name="a_card_number" class="form-control" value="{{ form_data.get('a_card_number', '') }}" required>
+      </div>
+      <div class="col-12 col-md-6">
+        <label class="form-label">B咭號碼</label>
+        <input type="text" name="b_card_number" class="form-control" value="{{ form_data.get('b_card_number', '') }}" required>
+        <div class="mt-2 d-flex gap-3">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" name="pps" value="1" id="form-pps" {% if form_data.get('pps') %}checked{% endif %}>
+            <label class="form-check-label" for="form-pps">PPS</label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" name="ns" value="1" id="form-ns" {% if form_data.get('ns') %}checked{% endif %}>
+            <label class="form-check-label" for="form-ns">ns</label>
+          </div>
+        </div>
+      </div>
+      <div class="col-12 col-md-6">
+        <label class="form-label">3HK合約完結日</label>
+        <input type="date" name="contract_end_date" class="form-control" value="{{ form_data.get('contract_end_date', '') }}" required>
+      </div>
+      <div class="col-12 col-md-6">
+        <label class="form-label">轉走日期</label>
+        <input type="date" name="transfer_out_date" class="form-control" value="{{ form_data.get('transfer_out_date', '') }}" required>
+      </div>
+      <div class="col-12 col-md-6">
+        <label class="form-label">開始日期</label>
+        <input type="date" name="start_date" class="form-control" value="{{ form_data.get('start_date', '') }}" required>
+      </div>
+      <div class="col-12 col-md-6">
+        <label class="form-label">取代日期</label>
+        <input type="date" name="replacement_date" class="form-control" value="{{ form_data.get('replacement_date', '') }}" required>
+      </div>
+
       <div class="col-12 col-md-6">
         <label class="form-label">代登記實名</label>
         <select name="real_name_registration" class="form-select" required>
