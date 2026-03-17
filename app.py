@@ -513,29 +513,16 @@ def export_orders():
     orders = db.execute(query, params).fetchall()
 
     columns = [
-        ("id", "ID"),
-        ("english_name", "English Name"),
-        ("chinese_name", "Chinese Name"),
-        ("hkid", "HKID"),
-        ("port_in_number", "Port-in Number"),
-        ("sim_number", "SIM Number"),
-        ("a_card_number", "A Card Number"),
-        ("b_card_number", "B Card Number"),
-        ("pps", "PPS"),
-        ("ns", "NS"),
-        ("contract_end_date", "3HK Contract End Date"),
-        ("transfer_out_date", "Transfer Out Date"),
-        ("start_date", "Start Date"),
-        ("replacement_date", "Replacement Date"),
-        ("dno", "DNO"),
-        ("card_type", "Card Type"),
-        ("plan", "Plan"),
-        ("cutover_date", "Cutover Date"),
-        ("cutover_time", "Cutover Time"),
-        ("real_name_registration", "Real Name Registration"),
-        ("remark", "Remark"),
-        ("photo_path", "Photo Path"),
-        ("created_at", "Created At"),
+        ("a_card_number", "A咭號碼"),
+        ("contract_end_date", "3HK合約完結日"),
+        ("transfer_out_date", "轉走日期"),
+        ("b_card_number", "B咭號碼"),
+        ("pps", "PPS (是/否)"),
+        ("ns", "ns (是/否)"),
+        ("start_date", "開始日期"),
+        ("replacement_date", "取代日期"),
+        ("remark", "備註"),
+        ("created_at", "建立時間"),
     ]
     filename_time = datetime.now().strftime("%Y%m%d_%H%M%S")
 
@@ -544,11 +531,23 @@ def export_orders():
         writer = DictWriter(output, fieldnames=[label for _field, label in columns])
         writer.writeheader()
         for order in orders:
-            writer.writerow({label: order[field] for field, label in columns})
+            writer.writerow(
+                {
+                    label: (
+                        "是"
+                        if field in {"pps", "ns"} and order[field]
+                        else "否"
+                        if field in {"pps", "ns"}
+                        else order[field]
+                    )
+                    for field, label in columns
+                }
+            )
 
         csv_text = output.getvalue()
+        csv_bytes = csv_text.encode("utf-8-sig")
         return Response(
-            csv_text,
+            csv_bytes,
             mimetype="text/csv; charset=utf-8",
             headers={
                 "Content-Disposition": f"attachment; filename=orders_{filename_time}.csv",
@@ -569,7 +568,10 @@ def export_orders():
     for order in orders:
         rows.append("<Row>")
         for field, _label in columns:
-            value = "" if order[field] is None else str(order[field])
+            if field in {"pps", "ns"}:
+                value = "是" if order[field] else "否"
+            else:
+                value = "" if order[field] is None else str(order[field])
             rows.append(f"<Cell><Data ss:Type=\"String\">{escape(value)}</Data></Cell>")
         rows.append("</Row>")
     rows.extend(["</Table></Worksheet>", "</Workbook>"])
