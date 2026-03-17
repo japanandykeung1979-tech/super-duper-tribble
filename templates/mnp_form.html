@@ -130,10 +130,13 @@
     const scanButton = document.getElementById('scan-auto-fill');
     const photoInput = document.getElementById('photo-input');
     const aCardNumberInput = document.getElementById('a-card-number');
+    const englishNameInput = document.querySelector('input[name="english_name"]');
+    const chineseNameInput = document.querySelector('input[name="chinese_name"]');
+    const hkidInput = document.querySelector('input[name="hkid"]');
     const ocrStatus = document.getElementById('ocr-status');
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
 
-    if (!scanButton || !photoInput || !aCardNumberInput || !ocrStatus) {
+    if (!scanButton || !photoInput || !aCardNumberInput || !englishNameInput || !chineseNameInput || !hkidInput || !ocrStatus) {
       return;
     }
 
@@ -165,12 +168,25 @@
           throw new Error(result.error || 'OCR 辨識失敗');
         }
 
+        if (result.english_name) {
+          englishNameInput.value = result.english_name;
+        }
+        if (result.chinese_name) {
+          chineseNameInput.value = result.chinese_name;
+        }
+        if (result.hkid) {
+          hkidInput.value = result.hkid;
+        }
+
         if (result.sim_card_number) {
           aCardNumberInput.value = result.sim_card_number;
-          ocrStatus.textContent = `辨識完成，已填入 A咭號碼：${result.sim_card_number}`;
+          ocrStatus.textContent = '辨識完成，已自動填入姓名、HKID 與 A咭號碼。';
+          ocrStatus.className = 'form-text mt-2 text-success';
+        } else if (result.english_name || result.chinese_name || result.hkid) {
+          ocrStatus.textContent = '辨識完成，已填入可辨識到的姓名與 HKID。';
           ocrStatus.className = 'form-text mt-2 text-success';
         } else {
-          ocrStatus.textContent = '未辨識到 18 至 20 位 SIM 卡號碼，請手動輸入。';
+          ocrStatus.textContent = '未辨識到可用資料，請手動輸入。';
           ocrStatus.className = 'form-text mt-2 text-warning';
         }
       } catch (error) {
