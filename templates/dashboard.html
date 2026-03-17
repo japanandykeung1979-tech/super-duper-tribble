@@ -8,7 +8,7 @@
       <small class="text-muted">將搜尋與新增分區，減少操作混亂。</small>
     </div>
 
-    <form id="dashboard-form" method="post" class="row g-3 align-items-end">
+    <form id="dashboard-form" method="post" enctype="multipart/form-data" class="row g-3 align-items-end">
       <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
       <div class="col-12">
         <div class="border rounded p-3 bg-light-subtle">
@@ -19,16 +19,16 @@
               <input id="a-card-input" type="text" class="form-control" name="a_card_number" value="{{ request.args.get('a_card_number','') }}">
             </div>
             <div class="col-12 col-lg-3">
-              <label class="form-label">B咭號碼</label>
-              <input id="b-card-input" type="text" class="form-control" name="b_card_number" value="{{ request.args.get('b_card_number','') }}">
-            </div>
-            <div class="col-12 col-lg-3">
               <label class="form-label">3HK合約完結日</label>
               <input type="date" class="form-control" name="contract_end_date" value="{{ request.args.get('contract_end_date','') }}">
             </div>
             <div class="col-12 col-lg-3">
               <label class="form-label">轉走日期</label>
               <input type="date" class="form-control" name="transfer_out_date" value="{{ request.args.get('transfer_out_date','') }}">
+            </div>
+            <div class="col-12 col-lg-3">
+              <label class="form-label">B咭號碼</label>
+              <input id="b-card-input" type="text" class="form-control" name="b_card_number" value="{{ request.args.get('b_card_number','') }}">
             </div>
             <div class="col-12 col-lg-3">
               <label class="form-label">開始日期</label>
@@ -44,16 +44,21 @@
             </div>
             <div class="col-12 col-lg-3">
               <label class="form-label d-block">標籤</label>
-              <div class="d-flex gap-3 mt-1">
-                <div class="form-check">
-                  <input class="form-check-input" type="checkbox" name="pps" value="1" id="dashboard-pps" {% if request.args.get('pps') == '1' %}checked{% endif %}>
-                  <label class="form-check-label" for="dashboard-pps">PPS</label>
+              <div class="d-flex flex-wrap gap-3 align-items-center mt-1">
+                <div class="d-flex gap-3">
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" name="pps" value="1" id="dashboard-pps" {% if request.args.get('pps') == '1' %}checked{% endif %}>
+                    <label class="form-check-label" for="dashboard-pps">PPS</label>
+                  </div>
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" name="ns" value="1" id="dashboard-ns" {% if request.args.get('ns') == '1' %}checked{% endif %}>
+                    <label class="form-check-label" for="dashboard-ns">ns</label>
+                  </div>
                 </div>
-                <div class="form-check">
-                  <input class="form-check-input" type="checkbox" name="ns" value="1" id="dashboard-ns" {% if request.args.get('ns') == '1' %}checked{% endif %}>
-                  <label class="form-check-label" for="dashboard-ns">ns</label>
-                </div>
+                <button type="button" class="btn btn-outline-primary btn-sm fw-semibold" id="photo-trigger-btn">📷 拍照/上傳</button>
+                <input id="camera-input" type="file" class="d-none" name="photo" accept="image/*" capture="environment">
               </div>
+              <div id="photo-file-name" class="form-text mt-2"></div>
             </div>
             <div class="col-12">
               <label class="form-label">備註（新增時會儲存，最多 100 字）</label>
@@ -82,7 +87,6 @@
       </div>
     </form>
 
-    <input id="camera-input" type="file" accept="image/*" capture="environment" class="d-none">
   </div>
 </div>
 
@@ -195,6 +199,16 @@
     let targetField = '';
 
     if (form && cameraInput && statusEl && aInput && bInput) {
+      const photoTriggerBtn = document.getElementById('photo-trigger-btn');
+      const photoFileName = document.getElementById('photo-file-name');
+
+      if (photoTriggerBtn) {
+        photoTriggerBtn.addEventListener('click', () => {
+          targetField = '';
+          cameraInput.click();
+        });
+      }
+
       form.querySelectorAll('[data-camera-target]').forEach((button) => {
         button.addEventListener('click', () => {
           targetField = button.dataset.cameraTarget || '';
@@ -205,7 +219,16 @@
 
       cameraInput.addEventListener('change', async () => {
         const file = cameraInput.files && cameraInput.files[0];
-        if (!file || !targetField) return;
+        if (!file) {
+          if (photoFileName) photoFileName.textContent = '';
+          return;
+        }
+
+        if (photoFileName) {
+          photoFileName.textContent = `已選擇：${file.name}`;
+        }
+
+        if (!targetField) return;
 
         statusEl.textContent = '正在辨識並自動新增紀錄...';
         statusEl.className = 'form-text text-primary';

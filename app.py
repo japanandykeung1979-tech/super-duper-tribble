@@ -648,9 +648,16 @@ def dashboard():
                 flash("請至少輸入 A咭號碼 或 B咭號碼，才可新增紀錄。", "danger")
                 return redirect(url_for("dashboard", **request.args.to_dict(flat=False)))
 
+            form_photo = request.files.get("photo")
             camera_photo = request.files.get("camera_photo")
             album_photo = request.files.get("album_photo")
-            selected_photo = camera_photo if camera_photo and camera_photo.filename else album_photo
+            selected_photo = (
+                form_photo
+                if form_photo and form_photo.filename
+                else camera_photo
+                if camera_photo and camera_photo.filename
+                else album_photo
+            )
             form_data["photo_path"] = save_uploaded_photo(selected_photo)
 
             if selected_photo and selected_photo.filename and not form_data["photo_path"]:
