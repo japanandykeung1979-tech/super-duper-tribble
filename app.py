@@ -209,10 +209,35 @@ def save_uploaded_photo(uploaded_file) -> str:
     return str(Path("uploads") / unique_name)
 
 
+def save_photo_bytes(image_bytes: bytes, extension: str) -> str:
+    if extension not in ALLOWED_IMAGE_EXTENSIONS:
+        return ""
+    UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
+    unique_name = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid4().hex}.{extension}"
+    destination = UPLOAD_FOLDER / unique_name
+    destination.write_bytes(image_bytes)
+    return str(Path("uploads") / unique_name)
+
+
 def extract_sim_card_number(ocr_text: str) -> str:
     """從 OCR 文字中嘗試找出 18-20 位的連續數字，作為 SIM 卡號碼。"""
     matches = re.findall(r"\b\d{18,20}\b", ocr_text)
     return matches[0] if matches else ""
+
+
+def run_ocr_on_image_bytes(image_bytes: bytes) -> str:
+    if pytesseract is None:
+        raise RuntimeError("OCR 模組未安裝，請先執行 pip install pytesseract。")
+
+    try:
+        from PIL import Image
+
+        image = Image.open(BytesIO(image_bytes))
+        return pytesseract.image_to_string(image)
+    except pytesseract.TesseractNotFoundError as error:
+        raise RuntimeError("找不到 Tesseract-OCR 執行檔，請先安裝系統套件。") from error
+    except Exception as error:
+        raise RuntimeError("OCR 辨識失敗，請嘗試更清晰的圖片。") from error
 
 
 def fetch_order(order_id: int) -> sqlite3.Row | None:
@@ -349,25 +374,17 @@ def ocr_scan():
     if not uploaded_photo or not uploaded_photo.filename:
         return jsonify({"error": "請先上傳圖片檔案。"}), 400
 
-    if pytesseract is None:
-        # 註解：若缺少 pytesseract 套件，回傳可讀錯誤，避免前端卡住。
-        return jsonify({"error": "OCR 模組未安裝，請先執行 pip install pytesseract。"}), 503
-
     filename = secure_filename(uploaded_photo.filename)
     extension = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
     if extension not in ALLOWED_IMAGE_EXTENSIONS:
         return jsonify({"error": "檔案格式不支援，請上傳圖片。"}), 400
 
     try:
-        from PIL import Image
-
         image_bytes = uploaded_photo.read()
-        image = Image.open(BytesIO(image_bytes))
-        # 註解：可依需要加入語言參數，例如 lang="chi_tra+eng"。
-        ocr_text = pytesseract.image_to_string(image)
-    except pytesseract.TesseractNotFoundError:
-        return jsonify({"error": "找不到 Tesseract-OCR 執行檔，請先安裝系統套件。"}), 503
-    except Exception:
+        ocr_text = run_ocr_on_image_bytes(image_bytes)
+    except RuntimeError as error:
+        if "未安裝" in str(error) or "找不到 Tesseract" in str(error):
+            return jsonify({"error": str(error)}), 503
         return jsonify({"error": "OCR 辨識失敗，請嘗試更清晰的圖片。"}), 500
 
     sim_card_number = extract_sim_card_number(ocr_text)
@@ -375,6 +392,53 @@ def ocr_scan():
         {
             "sim_card_number": sim_card_number,
             "raw_text": ocr_text,
+        }
+    )
+
+
+@app.post("/api/dashboard/ocr-add")
+@login_required
+def dashboard_ocr_add():
+    target_field = request.form.get("target_field", "").strip()
+    if target_field not in {"a_card_number", "b_card_number"}:
+        return jsonify({"error": "目標欄位不正確。"}), 400
+
+    uploaded_photo = request.files.get("photo")
+    if not uploaded_photo or not uploaded_photo.filename:
+        return jsonify({"error": "請先拍照或選擇相片。"}), 400
+
+    filename = secure_filename(uploaded_photo.filename)
+    extension = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if extension not in ALLOWED_IMAGE_EXTENSIONS:
+        return jsonify({"error": "檔案格式不支援，請上傳圖片。"}), 400
+
+    image_bytes = uploaded_photo.read()
+    photo_path = save_photo_bytes(image_bytes, extension)
+    if not photo_path:
+        return jsonify({"error": "相片儲存失敗。"}), 500
+
+    try:
+        ocr_text = run_ocr_on_image_bytes(image_bytes)
+    except RuntimeError as error:
+        if "未安裝" in str(error) or "找不到 Tesseract" in str(error):
+            return jsonify({"error": str(error)}), 503
+        return jsonify({"error": "OCR 辨識失敗，請嘗試更清晰的圖片。"}), 500
+
+    recognized_number = extract_sim_card_number(ocr_text)
+    form_data = build_dashboard_order_data(request.form)
+    form_data[target_field] = recognized_number or form_data.get(target_field, "")
+    form_data["photo_path"] = photo_path
+
+    if not form_data["a_card_number"] and not form_data["b_card_number"]:
+        return jsonify({"error": "未辨識到號碼，請重試或手動輸入。"}), 400
+
+    insert_order(form_data)
+    return jsonify(
+        {
+            "ok": True,
+            "target_field": target_field,
+            "recognized_number": recognized_number,
+            "message": "OCR 完成，已自動新增紀錄。",
         }
     )
 
