@@ -29,6 +29,7 @@ app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-secret-key-change-m
 DNO_OPTIONS = ["CMHK", "CSL", "SmarTone", "3HK", "HKBN", "其他"]
 PLAN_OPTIONS = ["5G Basic", "5G Premium", "4.5G Value", "Family Plan", "Data SIM"]
 TIME_OPTIONS = ["AM", "PM"]
+APPOINTMENT_TELECOM_OPTIONS = ["CSL", "SmarTone", "中國移動", "3HK", "中國聯通", "電訊數碼"]
 DATE_FIELDS = ["contract_end_date", "transfer_out_date", "start_date", "replacement_date"]
 MNP_REQUIRED_FIELDS = [
     "english_name",
@@ -101,6 +102,20 @@ def init_db() -> None:
         """
     )
 
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS appointments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            phone_number TEXT NOT NULL,
+            current_telecom TEXT NOT NULL,
+            contract_end_date TEXT,
+            current_plan_usage TEXT,
+            remark TEXT,
+            created_at TEXT NOT NULL
+        )
+        """
+    )
+
     existing_columns = {
         row[1] for row in db.execute("PRAGMA table_info(orders)").fetchall()
     }
@@ -131,6 +146,9 @@ def init_db() -> None:
         CREATE INDEX IF NOT EXISTS idx_orders_b_card_number ON orders(b_card_number);
         CREATE INDEX IF NOT EXISTS idx_orders_pps ON orders(pps);
         CREATE INDEX IF NOT EXISTS idx_orders_ns ON orders(ns);
+        CREATE INDEX IF NOT EXISTS idx_appointments_created_at ON appointments(created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_appointments_phone_number ON appointments(phone_number);
+        CREATE INDEX IF NOT EXISTS idx_appointments_contract_end_date ON appointments(contract_end_date);
         """
     )
 
@@ -278,6 +296,61 @@ def build_order_filters(args) -> tuple[str, list[Any]]:
     else:
         query += " ORDER BY created_at DESC"
     return query, params
+
+
+def build_appointment_filters(args) -> tuple[str, list[Any]]:
+    query = "SELECT * FROM appointments WHERE 1=1"
+    params: list[Any] = []
+
+    phone_number = args.get("phone_number", "").strip()
+    current_telecom = args.get("current_telecom", "").strip()
+    contract_end_date = args.get("contract_end_date", "").strip()
+    current_plan_usage = args.get("current_plan_usage", "").strip()
+    remark = args.get("remark", "").strip()
+
+    if phone_number:
+        query += " AND phone_number LIKE ?"
+        params.append(f"%{phone_number}%")
+    if current_telecom:
+        query += " AND current_telecom = ?"
+        params.append(current_telecom)
+    if contract_end_date:
+        query += " AND contract_end_date = ?"
+        params.append(contract_end_date)
+    if current_plan_usage:
+        query += " AND current_plan_usage LIKE ?"
+        params.append(f"%{current_plan_usage}%")
+    if remark:
+        query += " AND remark LIKE ?"
+        params.append(f"%{remark}%")
+
+    query += " ORDER BY created_at DESC"
+    return query, params
+
+
+def insert_appointment(data: dict[str, Any]) -> None:
+    db = get_db()
+    db.execute(
+        """
+        INSERT INTO appointments (
+            phone_number, current_telecom, contract_end_date, current_plan_usage, remark, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (
+            data["phone_number"],
+            data["current_telecom"],
+            data.get("contract_end_date", ""),
+            data.get("current_plan_usage", ""),
+            data.get("remark", "")[:100],
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        ),
+    )
+    db.commit()
+
+
+def fetch_appointment(appointment_id: int) -> sqlite3.Row | None:
+    db = get_db()
+    return db.execute("SELECT * FROM appointments WHERE id = ?", (appointment_id,)).fetchone()
 
 
 def collect_form_data(form, required_fields: list[str]) -> dict[str, Any]:
@@ -684,6 +757,121 @@ def dashboard():
     )
 
 
+@app.route("/appointments", methods=["GET", "POST"])
+@login_required
+def appointments():
+    if request.method == "POST":
+        action = request.form.get("action", "search")
+
+        if action == "search":
+            search_params = {
+                "phone_number": request.form.get("phone_number", "").strip(),
+                "current_telecom": request.form.get("current_telecom", "").strip(),
+                "contract_end_date": request.form.get("contract_end_date", "").strip(),
+                "current_plan_usage": request.form.get("current_plan_usage", "").strip(),
+                "remark": request.form.get("remark", "").strip(),
+            }
+            cleaned_params = {key: value for key, value in search_params.items() if value}
+            return redirect(url_for("appointments", **cleaned_params))
+
+        if action == "add":
+            form_data = {
+                "phone_number": request.form.get("phone_number", "").strip(),
+                "current_telecom": request.form.get("current_telecom", "").strip(),
+                "contract_end_date": request.form.get("contract_end_date", "").strip(),
+                "current_plan_usage": request.form.get("current_plan_usage", "").strip(),
+                "remark": request.form.get("remark", "").strip()[:100],
+            }
+
+            if not form_data["phone_number"] or form_data["current_telecom"] not in APPOINTMENT_TELECOM_OPTIONS:
+                flash("請填寫電話號碼，並選擇有效公司名。", "danger")
+                return redirect(url_for("appointments", **request.args.to_dict(flat=False)))
+
+            insert_appointment(form_data)
+            flash("已新增未登記及預約簽單紀錄。", "success")
+            return redirect(url_for("appointments", **request.args.to_dict(flat=False)))
+
+        flash("不支援的操作。", "danger")
+        return redirect(url_for("appointments", **request.args.to_dict(flat=False)))
+
+    query, params = build_appointment_filters(request.args)
+    db = get_db()
+    appointments_data = db.execute(query, params).fetchall()
+
+    return render_template(
+        "appointments.html",
+        appointments=appointments_data,
+        telecom_options=APPOINTMENT_TELECOM_OPTIONS,
+    )
+
+
+@app.get("/appointments/export")
+@login_required
+def export_appointments():
+    export_format = request.args.get("format", "csv").lower()
+    if export_format not in {"csv", "excel"}:
+        flash("匯出格式不支援。", "danger")
+        return redirect(url_for("appointments", **request.args))
+
+    query, params = build_appointment_filters(request.args)
+    db = get_db()
+    appointments_data = db.execute(query, params).fetchall()
+
+    columns = [
+        ("phone_number", "電話號碼"),
+        ("current_telecom", "公司名"),
+        ("contract_end_date", "合約完結日"),
+        ("current_plan_usage", "月費及用量"),
+        ("remark", "備註"),
+        ("created_at", "建立時間"),
+    ]
+    filename_time = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    if export_format == "csv":
+        output = StringIO()
+        writer = DictWriter(output, fieldnames=[label for _field, label in columns])
+        writer.writeheader()
+        for appointment in appointments_data:
+            writer.writerow({label: appointment[field] for field, label in columns})
+
+        csv_text = output.getvalue()
+        csv_bytes = csv_text.encode("utf-8-sig")
+        return Response(
+            csv_bytes,
+            mimetype="text/csv; charset=utf-8",
+            headers={
+                "Content-Disposition": f"attachment; filename=appointments_{filename_time}.csv",
+            },
+        )
+
+    rows = [
+        "<?xml version=\"1.0\"?>",
+        '<?mso-application progid="Excel.Sheet"?>',
+        '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"',
+        ' xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">',
+        '<Worksheet ss:Name="Appointments"><Table>',
+        "<Row>",
+    ]
+    for _field, label in columns:
+        rows.append(f"<Cell><Data ss:Type=\"String\">{escape(label)}</Data></Cell>")
+    rows.append("</Row>")
+    for appointment in appointments_data:
+        rows.append("<Row>")
+        for field, _label in columns:
+            value = "" if appointment[field] is None else str(appointment[field])
+            rows.append(f"<Cell><Data ss:Type=\"String\">{escape(value)}</Data></Cell>")
+        rows.append("</Row>")
+    rows.extend(["</Table></Worksheet>", "</Workbook>"])
+
+    return Response(
+        "\n".join(rows),
+        mimetype="application/vnd.ms-excel",
+        headers={
+            "Content-Disposition": f"attachment; filename=appointments_{filename_time}.xls",
+        },
+    )
+
+
 @app.get("/dashboard/export")
 @login_required
 def export_orders():
@@ -842,6 +1030,73 @@ def delete_order(order_id: int):
     else:
         flash("找不到要刪除的訂單。", "danger")
     return redirect(url_for("dashboard", **request.args.to_dict(flat=False)))
+
+
+@app.route("/appointments/<int:appointment_id>/edit", methods=["GET", "POST"])
+@login_required
+def edit_appointment(appointment_id: int):
+    appointment = fetch_appointment(appointment_id)
+    if appointment is None:
+        flash("找不到該筆紀錄。", "danger")
+        return redirect(url_for("appointments"))
+
+    if request.method == "POST":
+        form_data = {
+            "phone_number": request.form.get("phone_number", "").strip(),
+            "current_telecom": request.form.get("current_telecom", "").strip(),
+            "contract_end_date": request.form.get("contract_end_date", "").strip(),
+            "current_plan_usage": request.form.get("current_plan_usage", "").strip(),
+            "remark": request.form.get("remark", "").strip()[:100],
+        }
+
+        if not form_data["phone_number"] or form_data["current_telecom"] not in APPOINTMENT_TELECOM_OPTIONS:
+            flash("資料不完整或包含無效欄位，請檢查後重試。", "danger")
+            return render_template(
+                "edit_appointment.html",
+                appointment=form_data,
+                appointment_id=appointment_id,
+                telecom_options=APPOINTMENT_TELECOM_OPTIONS,
+            )
+
+        db = get_db()
+        db.execute(
+            """
+            UPDATE appointments
+            SET phone_number = ?, current_telecom = ?, contract_end_date = ?, current_plan_usage = ?, remark = ?
+            WHERE id = ?
+            """,
+            (
+                form_data["phone_number"],
+                form_data["current_telecom"],
+                form_data["contract_end_date"],
+                form_data["current_plan_usage"],
+                form_data["remark"],
+                appointment_id,
+            ),
+        )
+        db.commit()
+        flash("紀錄資料已更新。", "success")
+        return redirect(url_for("appointments"))
+
+    return render_template(
+        "edit_appointment.html",
+        appointment=appointment,
+        appointment_id=appointment_id,
+        telecom_options=APPOINTMENT_TELECOM_OPTIONS,
+    )
+
+
+@app.post("/appointments/<int:appointment_id>/delete")
+@login_required
+def delete_appointment(appointment_id: int):
+    db = get_db()
+    cursor = db.execute("DELETE FROM appointments WHERE id = ?", (appointment_id,))
+    db.commit()
+    if cursor.rowcount:
+        flash("紀錄已刪除。", "success")
+    else:
+        flash("找不到要刪除的紀錄。", "danger")
+    return redirect(url_for("appointments", **request.args.to_dict(flat=False)))
 
 
 init_db()
