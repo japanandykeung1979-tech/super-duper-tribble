@@ -159,8 +159,12 @@ def build_order_filters(args) -> tuple[str, list[Any]]:
     start_date = args.get("start_date", "").strip()
     replacement_date = args.get("replacement_date", "").strip()
     keyword = args.get("keyword", "").strip()
+    sort_by = args.get("sort_by", "").strip()
+    sort_order = args.get("sort_order", "asc").strip().lower()
     pps = args.get("pps") == "1"
     ns = args.get("ns") == "1"
+
+    date_fields = ["contract_end_date", "transfer_out_date", "start_date", "replacement_date"]
 
     if port_in_number:
         query += " AND port_in_number LIKE ?"
@@ -187,11 +191,23 @@ def build_order_filters(args) -> tuple[str, list[Any]]:
     if replacement_date:
         query += " AND replacement_date <= ?"
         params.append(replacement_date)
+
+    for field in date_fields:
+        month = args.get(f"{field}_month", "").strip()
+        year = args.get(f"{field}_year", "").strip()
+        if month and year:
+            query += f" AND strftime('%m', {field}) = ? AND strftime('%Y', {field}) = ?"
+            params.extend([month.zfill(2), year])
+
     if keyword:
         query += " AND (a_card_number LIKE ? OR b_card_number LIKE ? OR remark LIKE ?)"
         keyword_like = f"%{keyword}%"
         params.extend([keyword_like, keyword_like, keyword_like])
-    query += " ORDER BY created_at DESC"
+
+    if sort_by in date_fields and sort_order in {"asc", "desc"}:
+        query += f" ORDER BY {sort_by} {sort_order}, created_at DESC"
+    else:
+        query += " ORDER BY created_at DESC"
     return query, params
 
 
@@ -504,7 +520,12 @@ def dashboard():
                 "start_date": request.form.get("start_date", "").strip(),
                 "replacement_date": request.form.get("replacement_date", "").strip(),
                 "keyword": request.form.get("keyword", "").strip(),
+                "sort_by": request.form.get("sort_by", "").strip(),
+                "sort_order": request.form.get("sort_order", "").strip(),
             }
+            for field in ["contract_end_date", "transfer_out_date", "start_date", "replacement_date"]:
+                search_params[f"{field}_month"] = request.form.get(f"{field}_month", "").strip()
+                search_params[f"{field}_year"] = request.form.get(f"{field}_year", "").strip()
             if request.form.get("pps"):
                 search_params["pps"] = "1"
             if request.form.get("ns"):
