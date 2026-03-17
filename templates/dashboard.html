@@ -51,6 +51,11 @@
         </button>
       </div>
 
+      <div class="col-12 col-lg-6">
+        <label class="form-label">關鍵字（A/B咭、備註）</label>
+        <input type="text" class="form-control" name="keyword" value="{{ request.args.get('keyword','') }}" placeholder="輸入號碼或備註關鍵字">
+      </div>
+
       <div class="col-12">
         <label class="form-label">備註（約 100 字）</label>
         <textarea class="form-control" name="remark" rows="3" maxlength="100" placeholder="請輸入備註內容（最多 100 字）"></textarea>
@@ -83,7 +88,40 @@
   </div>
 </div>
 
+<div class="row g-3 mb-3">
+  <div class="col-6 col-lg-3">
+    <div class="card shadow-sm h-100"><div class="card-body"><div class="text-muted small">總記錄</div><div class="h4 mb-0">{{ metrics.total }}</div></div></div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="card shadow-sm h-100"><div class="card-body"><div class="text-muted small">PPS</div><div class="h4 mb-0">{{ metrics.pps_total }}</div></div></div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="card shadow-sm h-100"><div class="card-body"><div class="text-muted small">NS</div><div class="h4 mb-0">{{ metrics.ns_total }}</div></div></div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="card shadow-sm h-100"><div class="card-body"><div class="text-muted small">有相片</div><div class="h4 mb-0">{{ metrics.photo_total }}</div></div></div>
+  </div>
+</div>
+
+<div class="card shadow-sm mb-3">
+  <div class="card-body">
+    <h2 class="h6">30 日內合約到期提醒</h2>
+    {% if metrics.upcoming_contracts %}
+    <ul class="mb-0 ps-3">
+      {% for item in metrics.upcoming_contracts %}
+      <li>
+        A: {{ item.a_card_number or '-' }} / B: {{ item.b_card_number or '-' }} — {{ item.contract_end_date }}（{{ item.days_left }} 日後）
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <div class="text-muted">未有即將到期資料。</div>
+    {% endif %}
+  </div>
+</div>
+
 <div class="card shadow-sm">
+
   <div class="card-body">
     <h2 class="h6">結果列表 ({{ orders|length }})</h2>
     <div class="table-responsive">
