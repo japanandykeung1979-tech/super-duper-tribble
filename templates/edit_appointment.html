@@ -1,0 +1,41 @@
+{% extends 'base.html' %}
+{% block title %}編輯未登記及預約簽單 - Telecom CRM{% endblock %}
+{% block content %}
+<div class="card shadow-sm">
+  <div class="card-body">
+    <h2 class="h5 mb-3">編輯未登記及預約簽單紀錄 #{{ appointment_id }}</h2>
+    <form method="post" class="row g-3">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+      <div class="col-12 col-lg-6">
+        <label class="form-label">電話號碼</label>
+        <input type="tel" class="form-control" name="phone_number" value="{{ appointment['phone_number'] }}" required>
+      </div>
+      <div class="col-12 col-lg-6">
+        <label class="form-label">公司名</label>
+        <select class="form-select" name="current_telecom" required>
+          <option value="">請選擇公司名</option>
+          {% for option in telecom_options %}
+          <option value="{{ option }}" {% if appointment['current_telecom'] == option %}selected{% endif %}>{{ option }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-12 col-lg-6">
+        <label class="form-label">合約期完結日</label>
+        <input type="date" class="form-control" name="contract_end_date" value="{{ appointment['contract_end_date'] }}">
+      </div>
+      <div class="col-12 col-lg-6">
+        <label class="form-label">交緊的月費以及用量</label>
+        <input type="text" class="form-control" name="current_plan_usage" value="{{ appointment['current_plan_usage'] }}">
+      </div>
+      <div class="col-12">
+        <label class="form-label">備註（最多 100 字）</label>
+        <textarea class="form-control" name="remark" rows="3" maxlength="100">{{ appointment['remark'] }}</textarea>
+      </div>
+      <div class="col-12 d-flex gap-2">
+        <button type="submit" class="btn btn-primary">儲存變更</button>
+        <a href="{{ url_for('appointments') }}" class="btn btn-outline-secondary">返回未登記及預約簽單</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

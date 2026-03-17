@@ -1,0 +1,105 @@
+{% extends 'base.html' %}
+{% block title %}未登記及預約簽單 - Telecom CRM{% endblock %}
+{% block content %}
+<div class="card shadow-sm mb-3">
+  <div class="card-body">
+    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-2 mb-3">
+      <h2 class="h5 mb-0">未登記及預約簽單 (Lead & Appointment Management)</h2>
+      <small class="text-muted">以 Dashboard 風格快速新增、搜尋與管理預約簽單。</small>
+    </div>
+
+    <form method="post" class="row g-3 align-items-end">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+      <div class="col-12">
+        <div class="border rounded p-3 bg-light-subtle">
+          <div class="fw-semibold mb-2">快速欄位（搜尋 + 新增）</div>
+          <div class="row g-3 align-items-end">
+            <div class="col-12 col-lg-3">
+              <label class="form-label">電話號碼</label>
+              <input type="tel" class="form-control" name="phone_number" value="{{ request.args.get('phone_number','') }}" placeholder="請輸入電話號碼">
+            </div>
+            <div class="col-12 col-lg-3">
+              <label class="form-label">公司名</label>
+              <select class="form-select" name="current_telecom">
+                <option value="">請選擇公司名</option>
+                {% for option in telecom_options %}
+                <option value="{{ option }}" {% if request.args.get('current_telecom','') == option %}selected{% endif %}>{{ option }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-12 col-lg-3">
+              <label class="form-label">合約期完結日</label>
+              <input type="date" class="form-control" name="contract_end_date" value="{{ request.args.get('contract_end_date','') }}">
+            </div>
+            <div class="col-12 col-lg-3">
+              <label class="form-label">交緊的月費以及用量</label>
+              <input type="text" class="form-control" name="current_plan_usage" value="{{ request.args.get('current_plan_usage','') }}" placeholder="例如：$238 / 50GB">
+            </div>
+            <div class="col-12">
+              <label class="form-label">備註（最多 100 字）</label>
+              <textarea class="form-control" name="remark" rows="2" maxlength="100" placeholder="請輸入備註內容（最多 100 字）">{{ request.args.get('remark','') }}</textarea>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12 d-grid d-md-flex gap-2">
+        <button class="btn btn-success" type="submit" name="action" value="add">新增紀錄</button>
+        <button class="btn btn-primary" type="submit" name="action" value="search">搜尋</button>
+        <a class="btn btn-outline-secondary" href="{{ url_for('appointments') }}">清除條件</a>
+        <div class="dropdown">
+          <button class="btn btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+            匯出
+          </button>
+          <ul class="dropdown-menu">
+            <li><a class="dropdown-item" href="{{ url_for('export_appointments', format='csv', **request.args.to_dict(flat=False)) }}">匯出 CSV</a></li>
+            <li><a class="dropdown-item" href="{{ url_for('export_appointments', format='excel', **request.args.to_dict(flat=False)) }}">匯出 Excel</a></li>
+          </ul>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-body">
+    <h2 class="h6">結果列表 ({{ appointments|length }})</h2>
+    <div class="table-responsive">
+      <table class="table table-striped table-hover align-middle">
+        <thead>
+          <tr>
+            <th>電話號碼</th>
+            <th>公司名</th>
+            <th>合約完結日</th>
+            <th>月費及用量</th>
+            <th>備註</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in appointments %}
+          <tr>
+            <td>{{ item['phone_number'] }}</td>
+            <td>{{ item['current_telecom'] }}</td>
+            <td>{{ item['contract_end_date'] or '-' }}</td>
+            <td>{{ item['current_plan_usage'] or '-' }}</td>
+            <td>{{ item['remark'] or '-' }}</td>
+            <td>
+              <div class="d-flex gap-2">
+                <a class="btn btn-sm btn-outline-primary" href="{{ url_for('edit_appointment', appointment_id=item['id']) }}">編輯</a>
+                <form method="post" action="{{ url_for('delete_appointment', appointment_id=item['id'], **request.args.to_dict(flat=False)) }}" onsubmit="return confirm('確定要刪除此筆紀錄嗎？');">
+                  <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+                  <button type="submit" class="btn btn-sm btn-outline-danger">刪除</button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6" class="text-center text-muted py-4">沒有符合條件的記錄。</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
