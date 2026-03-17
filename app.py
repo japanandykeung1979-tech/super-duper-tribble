@@ -158,6 +158,7 @@ def build_order_filters(args) -> tuple[str, list[Any]]:
     transfer_out_date = args.get("transfer_out_date", "").strip()
     start_date = args.get("start_date", "").strip()
     replacement_date = args.get("replacement_date", "").strip()
+    keyword = args.get("keyword", "").strip()
     pps = args.get("pps") == "1"
     ns = args.get("ns") == "1"
 
@@ -186,8 +187,53 @@ def build_order_filters(args) -> tuple[str, list[Any]]:
     if replacement_date:
         query += " AND replacement_date <= ?"
         params.append(replacement_date)
+    if keyword:
+        query += " AND (a_card_number LIKE ? OR b_card_number LIKE ? OR remark LIKE ?)"
+        keyword_like = f"%{keyword}%"
+        params.extend([keyword_like, keyword_like, keyword_like])
     query += " ORDER BY created_at DESC"
     return query, params
+
+
+def parse_date(date_str: str) -> datetime | None:
+    if not date_str:
+        return None
+    try:
+        return datetime.strptime(date_str, "%Y-%m-%d")
+    except ValueError:
+        return None
+
+
+def build_dashboard_metrics(orders: list[sqlite3.Row]) -> dict[str, Any]:
+    today = datetime.now().date()
+    upcoming_contracts: list[dict[str, Any]] = []
+
+    for order in orders:
+        contract_date = parse_date(order["contract_end_date"])
+        if contract_date is None:
+            continue
+
+        days_left = (contract_date.date() - today).days
+        if 0 <= days_left <= 30:
+            upcoming_contracts.append(
+                {
+                    "id": order["id"],
+                    "a_card_number": order["a_card_number"],
+                    "b_card_number": order["b_card_number"],
+                    "contract_end_date": order["contract_end_date"],
+                    "days_left": days_left,
+                }
+            )
+
+    upcoming_contracts.sort(key=lambda item: item["days_left"])
+
+    return {
+        "total": len(orders),
+        "pps_total": sum(1 for order in orders if order["pps"]),
+        "ns_total": sum(1 for order in orders if order["ns"]),
+        "photo_total": sum(1 for order in orders if order["photo_path"]),
+        "upcoming_contracts": upcoming_contracts[:5],
+    }
 
 
 def save_uploaded_photo(uploaded_file) -> str:
@@ -457,6 +503,7 @@ def dashboard():
                 "b_card_number": request.form.get("b_card_number", "").strip(),
                 "start_date": request.form.get("start_date", "").strip(),
                 "replacement_date": request.form.get("replacement_date", "").strip(),
+                "keyword": request.form.get("keyword", "").strip(),
             }
             if request.form.get("pps"):
                 search_params["pps"] = "1"
@@ -493,10 +540,12 @@ def dashboard():
 
     db = get_db()
     orders = db.execute(query, params).fetchall()
+    metrics = build_dashboard_metrics(orders)
 
     return render_template(
         "dashboard.html",
         orders=orders,
+        metrics=metrics,
     )
 
 
