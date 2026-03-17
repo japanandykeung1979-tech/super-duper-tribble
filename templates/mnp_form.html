@@ -63,7 +63,7 @@
 
       <div class="col-12 col-md-6">
         <label class="form-label">A咭號碼</label>
-        <input type="text" name="a_card_number" class="form-control" value="{{ form_data.get('a_card_number', '') }}" required>
+        <input type="text" id="a-card-number" name="a_card_number" class="form-control" value="{{ form_data.get('a_card_number', '') }}" required>
       </div>
       <div class="col-12 col-md-6">
         <label class="form-label">B咭號碼</label>
@@ -111,7 +111,11 @@
       </div>
       <div class="col-12">
         <label class="form-label">上傳相片</label>
-        <input type="file" name="photo" class="form-control" accept="image/*">
+        <div class="d-flex flex-column flex-md-row gap-2 align-items-md-center">
+          <input type="file" id="photo-input" name="photo" class="form-control" accept="image/*">
+          <button type="button" id="scan-auto-fill" class="btn btn-outline-primary text-nowrap">掃描並自動填寫</button>
+        </div>
+        <div id="ocr-status" class="form-text mt-2"></div>
       </div>
       <div class="col-12">
         <button type="submit" class="btn btn-primary w-100">提交登記</button>
@@ -119,4 +123,61 @@
     </form>
   </div>
 </div>
+
+<script>
+  (() => {
+    const scanButton = document.getElementById('scan-auto-fill');
+    const photoInput = document.getElementById('photo-input');
+    const aCardNumberInput = document.getElementById('a-card-number');
+    const ocrStatus = document.getElementById('ocr-status');
+
+    if (!scanButton || !photoInput || !aCardNumberInput || !ocrStatus) {
+      return;
+    }
+
+    scanButton.addEventListener('click', async () => {
+      const selectedFile = photoInput.files && photoInput.files[0];
+      if (!selectedFile) {
+        ocrStatus.textContent = '請先選擇一張相片再進行掃描。';
+        ocrStatus.className = 'form-text mt-2 text-danger';
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('photo', selectedFile);
+
+      ocrStatus.textContent = '正在辨識中...';
+      ocrStatus.className = 'form-text mt-2 text-primary';
+      scanButton.disabled = true;
+
+      try {
+        const response = await fetch('/api/ocr', {
+          method: 'POST',
+          body: formData,
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(result.error || 'OCR 辨識失敗');
+        }
+
+        // 註解：目前優先把 SIM 卡號碼回填到第一行 A咭號碼，可按流程再擴充更多欄位。
+        if (result.sim_card_number) {
+          aCardNumberInput.value = result.sim_card_number;
+          ocrStatus.textContent = `辨識完成，已填入 A咭號碼：${result.sim_card_number}`;
+          ocrStatus.className = 'form-text mt-2 text-success';
+        } else {
+          ocrStatus.textContent = '未辨識到 18 至 20 位 SIM 卡號碼，請手動輸入。';
+          ocrStatus.className = 'form-text mt-2 text-warning';
+        }
+      } catch (error) {
+        ocrStatus.textContent = error.message || 'OCR 辨識失敗，請稍後再試。';
+        ocrStatus.className = 'form-text mt-2 text-danger';
+      } finally {
+        scanButton.disabled = false;
+      }
+    });
+  })();
+</script>
 {% endblock %}

@@ -1,18 +1,24 @@
 from __future__ import annotations
 
 import os
+import re
 import sqlite3
 from csv import DictWriter
 from datetime import datetime
 from functools import wraps
-from io import StringIO
+from io import BytesIO, StringIO
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
 from xml.sax.saxutils import escape
 
-from flask import Flask, flash, g, redirect, render_template, request, session, url_for, Response
+from flask import Flask, Response, flash, g, jsonify, redirect, render_template, request, session, url_for
 from werkzeug.utils import secure_filename
+
+try:
+    import pytesseract
+except ImportError:  # 可選依賴：未安裝時仍可啟動主系統。
+    pytesseract = None
 
 BASE_DIR = Path(__file__).resolve().parent
 DATABASE = BASE_DIR / "crm.db"
@@ -203,6 +209,12 @@ def save_uploaded_photo(uploaded_file) -> str:
     return str(Path("uploads") / unique_name)
 
 
+def extract_sim_card_number(ocr_text: str) -> str:
+    """從 OCR 文字中嘗試找出 18-20 位的連續數字，作為 SIM 卡號碼。"""
+    matches = re.findall(r"\b\d{18,20}\b", ocr_text)
+    return matches[0] if matches else ""
+
+
 def fetch_order(order_id: int) -> sqlite3.Row | None:
     db = get_db()
     return db.execute("SELECT * FROM orders WHERE id = ?", (order_id,)).fetchone()
@@ -327,6 +339,43 @@ def mnp_form():
         plan_options=PLAN_OPTIONS,
         time_options=TIME_OPTIONS,
         form_data={},
+    )
+
+
+@app.post("/api/ocr")
+@login_required
+def ocr_scan():
+    uploaded_photo = request.files.get("photo")
+    if not uploaded_photo or not uploaded_photo.filename:
+        return jsonify({"error": "請先上傳圖片檔案。"}), 400
+
+    if pytesseract is None:
+        # 註解：若缺少 pytesseract 套件，回傳可讀錯誤，避免前端卡住。
+        return jsonify({"error": "OCR 模組未安裝，請先執行 pip install pytesseract。"}), 503
+
+    filename = secure_filename(uploaded_photo.filename)
+    extension = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if extension not in ALLOWED_IMAGE_EXTENSIONS:
+        return jsonify({"error": "檔案格式不支援，請上傳圖片。"}), 400
+
+    try:
+        from PIL import Image
+
+        image_bytes = uploaded_photo.read()
+        image = Image.open(BytesIO(image_bytes))
+        # 註解：可依需要加入語言參數，例如 lang="chi_tra+eng"。
+        ocr_text = pytesseract.image_to_string(image)
+    except pytesseract.TesseractNotFoundError:
+        return jsonify({"error": "找不到 Tesseract-OCR 執行檔，請先安裝系統套件。"}), 503
+    except Exception:
+        return jsonify({"error": "OCR 辨識失敗，請嘗試更清晰的圖片。"}), 500
+
+    sim_card_number = extract_sim_card_number(ocr_text)
+    return jsonify(
+        {
+            "sim_card_number": sim_card_number,
+            "raw_text": ocr_text,
+        }
     )
 
 
