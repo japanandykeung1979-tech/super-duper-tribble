@@ -379,6 +379,39 @@ def extract_sim_card_number(ocr_text: str) -> str:
     return matches[0] if matches else ""
 
 
+def parse_hkid_ocr_fields(ocr_text: str) -> dict[str, str]:
+    compact_text = re.sub(r"\s+", "", ocr_text.upper())
+    hkid_match = re.search(r"\b([A-Z]{1,2}\d{6}\([0-9A]\))\b", compact_text)
+    hkid = hkid_match.group(1) if hkid_match else ""
+
+    lines = [line.strip() for line in ocr_text.splitlines() if line.strip()]
+
+    english_name = ""
+    for line in lines:
+        cleaned_line = re.sub(r"[^A-Z,\-\s]", "", line.upper()).strip(" ,-")
+        if not cleaned_line:
+            continue
+        if len(cleaned_line.replace(" ", "")) < 4:
+            continue
+        words = [word for word in re.split(r"[\s,]+", cleaned_line) if word]
+        if len(words) < 2:
+            continue
+        if all(re.fullmatch(r"[A-Z\-]+", word) for word in words):
+            english_name = " ".join(words)
+            break
+
+    chinese_name = ""
+    chinese_candidates = re.findall(r"[\u4e00-\u9fff]{2,}", ocr_text)
+    if chinese_candidates:
+        chinese_name = max(chinese_candidates, key=len)
+
+    return {
+        "hkid": hkid,
+        "english_name": english_name,
+        "chinese_name": chinese_name,
+    }
+
+
 def run_ocr_on_image_bytes(image_bytes: bytes) -> str:
     if pytesseract is None:
         raise RuntimeError("OCR 模組未安裝，請先執行 pip install pytesseract。")
@@ -520,9 +553,13 @@ def ocr_scan():
         return jsonify({"error": "OCR 辨識失敗，請嘗試更清晰的圖片。"}), 500
 
     sim_card_number = extract_sim_card_number(ocr_text)
+    hkid_fields = parse_hkid_ocr_fields(ocr_text)
     return jsonify(
         {
             "sim_card_number": sim_card_number,
+            "hkid": hkid_fields["hkid"],
+            "english_name": hkid_fields["english_name"],
+            "chinese_name": hkid_fields["chinese_name"],
             "raw_text": ocr_text,
         }
     )

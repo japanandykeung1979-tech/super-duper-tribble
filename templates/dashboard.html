@@ -16,17 +16,11 @@
           <div class="row g-3 align-items-end">
             <div class="col-12 col-lg-3">
               <label class="form-label">A咭號碼</label>
-              <div class="input-group">
-                <input id="a-card-input" type="text" class="form-control" name="a_card_number" value="{{ request.args.get('a_card_number','') }}">
-                <button type="button" class="btn btn-outline-dark" data-camera-target="a_card_number" aria-label="掃描 A咭號碼">📷 OCR</button>
-              </div>
+              <input id="a-card-input" type="text" class="form-control" name="a_card_number" value="{{ request.args.get('a_card_number','') }}">
             </div>
             <div class="col-12 col-lg-3">
               <label class="form-label">B咭號碼</label>
-              <div class="input-group">
-                <input id="b-card-input" type="text" class="form-control" name="b_card_number" value="{{ request.args.get('b_card_number','') }}">
-                <button type="button" class="btn btn-outline-dark" data-camera-target="b_card_number" aria-label="掃描 B咭號碼">📷 OCR</button>
-              </div>
+              <input id="b-card-input" type="text" class="form-control" name="b_card_number" value="{{ request.args.get('b_card_number','') }}">
             </div>
             <div class="col-12 col-lg-3">
               <label class="form-label">3HK合約完結日</label>
@@ -92,19 +86,11 @@
   </div>
 </div>
 
-<div class="row g-3 mb-3">
-  <div class="col-6 col-lg-3">
-    <div class="card shadow-sm h-100"><div class="card-body"><div class="text-muted small">總記錄</div><div class="h4 mb-0">{{ metrics.total }}</div></div></div>
-  </div>
-  <div class="col-6 col-lg-3">
-    <div class="card shadow-sm h-100"><div class="card-body"><div class="text-muted small">PPS</div><div class="h4 mb-0">{{ metrics.pps_total }}</div></div></div>
-  </div>
-  <div class="col-6 col-lg-3">
-    <div class="card shadow-sm h-100"><div class="card-body"><div class="text-muted small">NS</div><div class="h4 mb-0">{{ metrics.ns_total }}</div></div></div>
-  </div>
-  <div class="col-6 col-lg-3">
-    <div class="card shadow-sm h-100"><div class="card-body"><div class="text-muted small">有相片</div><div class="h4 mb-0">{{ metrics.photo_total }}</div></div></div>
-  </div>
+<div class="d-flex flex-wrap gap-2 mb-3">
+  <span class="badge rounded-pill text-bg-light border">總記錄：{{ metrics.total }}</span>
+  <span class="badge rounded-pill text-bg-light border">PPS：{{ metrics.pps_total }}</span>
+  <span class="badge rounded-pill text-bg-light border">NS：{{ metrics.ns_total }}</span>
+  <span class="badge rounded-pill text-bg-light border">有相片：{{ metrics.photo_total }}</span>
 </div>
 
 <div class="card shadow-sm mb-3">
