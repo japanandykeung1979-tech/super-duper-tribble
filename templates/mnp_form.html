@@ -5,6 +5,7 @@
   <div class="card-body">
     <h2 class="h5 mb-3">轉台登記表單</h2>
     <form method="post" enctype="multipart/form-data" class="row g-3">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
       <div class="col-12 col-md-6">
         <label class="form-label">英文名</label>
         <input type="text" name="english_name" class="form-control" value="{{ form_data.get('english_name', '') }}" required>
@@ -130,6 +131,7 @@
     const photoInput = document.getElementById('photo-input');
     const aCardNumberInput = document.getElementById('a-card-number');
     const ocrStatus = document.getElementById('ocr-status');
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
 
     if (!scanButton || !photoInput || !aCardNumberInput || !ocrStatus) {
       return;
@@ -154,6 +156,7 @@
         const response = await fetch('/api/ocr', {
           method: 'POST',
           body: formData,
+          headers: { 'X-CSRF-Token': csrfToken },
         });
 
         const result = await response.json();
@@ -162,7 +165,6 @@
           throw new Error(result.error || 'OCR 辨識失敗');
         }
 
-        // 註解：目前優先把 SIM 卡號碼回填到第一行 A咭號碼，可按流程再擴充更多欄位。
         if (result.sim_card_number) {
           aCardNumberInput.value = result.sim_card_number;
           ocrStatus.textContent = `辨識完成，已填入 A咭號碼：${result.sim_card_number}`;

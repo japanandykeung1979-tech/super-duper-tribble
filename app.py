@@ -12,7 +12,7 @@ from typing import Any
 from uuid import uuid4
 from xml.sax.saxutils import escape
 
-from flask import Flask, Response, flash, g, jsonify, redirect, render_template, request, session, url_for
+from flask import Flask, Response, abort, flash, g, jsonify, redirect, render_template, request, session, url_for
 from werkzeug.utils import secure_filename
 
 try:
@@ -29,6 +29,40 @@ app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-secret-key-change-m
 DNO_OPTIONS = ["CMHK", "CSL", "SmarTone", "3HK", "HKBN", "其他"]
 PLAN_OPTIONS = ["5G Basic", "5G Premium", "4.5G Value", "Family Plan", "Data SIM"]
 TIME_OPTIONS = ["AM", "PM"]
+DATE_FIELDS = ["contract_end_date", "transfer_out_date", "start_date", "replacement_date"]
+MNP_REQUIRED_FIELDS = [
+    "english_name",
+    "chinese_name",
+    "hkid",
+    "port_in_number",
+    "sim_number",
+    "dno",
+    "card_type",
+    "plan",
+    "cutover_date",
+    "cutover_time",
+    "real_name_registration",
+    "a_card_number",
+    "b_card_number",
+    "contract_end_date",
+    "transfer_out_date",
+    "start_date",
+    "replacement_date",
+]
+EDIT_REQUIRED_FIELDS = [
+    "english_name",
+    "chinese_name",
+    "hkid",
+    "port_in_number",
+    "sim_number",
+    "dno",
+    "card_type",
+    "plan",
+    "cutover_date",
+    "cutover_time",
+    "real_name_registration",
+]
+VALID_REAL_NAME_VALUES = {"是", "否"}
 UPLOAD_FOLDER = BASE_DIR / "static" / "uploads"
 ALLOWED_IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp", "bmp", "heic", "heif"}
 
@@ -86,6 +120,20 @@ def init_db() -> None:
         if column not in existing_columns:
             db.execute(f"ALTER TABLE orders ADD COLUMN {column} {column_type}")
 
+    db.executescript(
+        """
+        CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_orders_contract_end_date ON orders(contract_end_date);
+        CREATE INDEX IF NOT EXISTS idx_orders_transfer_out_date ON orders(transfer_out_date);
+        CREATE INDEX IF NOT EXISTS idx_orders_start_date ON orders(start_date);
+        CREATE INDEX IF NOT EXISTS idx_orders_replacement_date ON orders(replacement_date);
+        CREATE INDEX IF NOT EXISTS idx_orders_a_card_number ON orders(a_card_number);
+        CREATE INDEX IF NOT EXISTS idx_orders_b_card_number ON orders(b_card_number);
+        CREATE INDEX IF NOT EXISTS idx_orders_pps ON orders(pps);
+        CREATE INDEX IF NOT EXISTS idx_orders_ns ON orders(ns);
+        """
+    )
+
     db.commit()
     db.close()
 
@@ -105,6 +153,29 @@ def login_required(view):
         return view(**kwargs)
 
     return wrapped_view
+
+
+@app.before_request
+def csrf_protect() -> None:
+    if request.method != "POST":
+        return
+
+    token = request.form.get("_csrf_token") or request.headers.get("X-CSRF-Token")
+    expected = session.get("csrf_token")
+    if not expected or token != expected:
+        if request.path.startswith("/api/"):
+            abort(400, description="CSRF 驗證失敗。")
+        flash("表單驗證逾時，請重新提交。", "danger")
+        return redirect(request.url)
+
+
+@app.context_processor
+def inject_csrf_token() -> dict[str, str]:
+    token = session.get("csrf_token")
+    if not token:
+        token = uuid4().hex
+        session["csrf_token"] = token
+    return {"csrf_token": token}
 
 
 def insert_order(data: dict[str, Any]) -> None:
@@ -164,8 +235,6 @@ def build_order_filters(args) -> tuple[str, list[Any]]:
     pps = args.get("pps") == "1"
     ns = args.get("ns") == "1"
 
-    date_fields = ["contract_end_date", "transfer_out_date", "start_date", "replacement_date"]
-
     if port_in_number:
         query += " AND port_in_number LIKE ?"
         params.append(f"%{port_in_number}%")
@@ -192,7 +261,7 @@ def build_order_filters(args) -> tuple[str, list[Any]]:
         query += " AND replacement_date <= ?"
         params.append(replacement_date)
 
-    for field in date_fields:
+    for field in DATE_FIELDS:
         month = args.get(f"{field}_month", "").strip()
         year = args.get(f"{field}_year", "").strip()
         if month and year:
@@ -204,11 +273,34 @@ def build_order_filters(args) -> tuple[str, list[Any]]:
         keyword_like = f"%{keyword}%"
         params.extend([keyword_like, keyword_like, keyword_like])
 
-    if sort_by in date_fields and sort_order in {"asc", "desc"}:
+    if sort_by in DATE_FIELDS and sort_order in {"asc", "desc"}:
         query += f" ORDER BY {sort_by} {sort_order}, created_at DESC"
     else:
         query += " ORDER BY created_at DESC"
     return query, params
+
+
+def collect_form_data(form, required_fields: list[str]) -> dict[str, Any]:
+    form_data = {field: form.get(field, "").strip() for field in required_fields}
+    form_data["remark"] = form.get("remark", "").strip()[:100]
+    form_data["pps"] = 1 if form.get("pps") else 0
+    form_data["ns"] = 1 if form.get("ns") else 0
+    return form_data
+
+
+def validate_form_data(form_data: dict[str, Any], required_fields: list[str]) -> list[str]:
+    missing = [field for field in required_fields if not form_data.get(field)]
+
+    if "dno" in required_fields and form_data.get("dno") not in DNO_OPTIONS:
+        missing.append("dno")
+    if "plan" in required_fields and form_data.get("plan") not in PLAN_OPTIONS:
+        missing.append("plan")
+    if "cutover_time" in required_fields and form_data.get("cutover_time") not in TIME_OPTIONS:
+        missing.append("cutover_time")
+    if "real_name_registration" in required_fields and form_data.get("real_name_registration") not in VALID_REAL_NAME_VALUES:
+        missing.append("real_name_registration")
+
+    return missing
 
 
 def parse_date(date_str: str) -> datetime | None:
@@ -369,29 +461,7 @@ def logout():
 @login_required
 def mnp_form():
     if request.method == "POST":
-        required_fields = [
-            "english_name",
-            "chinese_name",
-            "hkid",
-            "port_in_number",
-            "sim_number",
-            "dno",
-            "card_type",
-            "plan",
-            "cutover_date",
-            "cutover_time",
-            "real_name_registration",
-            "a_card_number",
-            "b_card_number",
-            "contract_end_date",
-            "transfer_out_date",
-            "start_date",
-            "replacement_date",
-        ]
-        form_data = {field: request.form.get(field, "").strip() for field in required_fields}
-        form_data["remark"] = request.form.get("remark", "").strip()[:100]
-        form_data["pps"] = 1 if request.form.get("pps") else 0
-        form_data["ns"] = 1 if request.form.get("ns") else 0
+        form_data = collect_form_data(request.form, MNP_REQUIRED_FIELDS)
 
         uploaded_photo = request.files.get("photo")
         form_data["photo_path"] = save_uploaded_photo(uploaded_photo)
@@ -405,7 +475,7 @@ def mnp_form():
                 form_data=form_data,
             )
 
-        missing = [field for field, value in form_data.items() if field in required_fields and not value]
+        missing = validate_form_data(form_data, MNP_REQUIRED_FIELDS)
         if missing:
             flash("請填寫所有必填欄位。", "danger")
             return render_template(
@@ -523,7 +593,7 @@ def dashboard():
                 "sort_by": request.form.get("sort_by", "").strip(),
                 "sort_order": request.form.get("sort_order", "").strip(),
             }
-            for field in ["contract_end_date", "transfer_out_date", "start_date", "replacement_date"]:
+            for field in DATE_FIELDS:
                 search_params[f"{field}_month"] = request.form.get(f"{field}_month", "").strip()
                 search_params[f"{field}_year"] = request.form.get(f"{field}_year", "").strip()
             if request.form.get("pps"):
@@ -664,31 +734,8 @@ def edit_order(order_id: int):
         return redirect(url_for("dashboard"))
 
     if request.method == "POST":
-        required_fields = [
-            "english_name",
-            "chinese_name",
-            "hkid",
-            "port_in_number",
-            "sim_number",
-            "dno",
-            "card_type",
-            "plan",
-            "cutover_date",
-            "cutover_time",
-            "real_name_registration",
-        ]
-        form_data = {field: request.form.get(field, "").strip() for field in required_fields}
-        form_data["remark"] = request.form.get("remark", "").strip()[:100]
-        missing = [field for field in required_fields if not form_data[field]]
-
-        if form_data["dno"] not in DNO_OPTIONS:
-            missing.append("dno")
-        if form_data["plan"] not in PLAN_OPTIONS:
-            missing.append("plan")
-        if form_data["cutover_time"] not in TIME_OPTIONS:
-            missing.append("cutover_time")
-        if form_data["real_name_registration"] not in {"是", "否"}:
-            missing.append("real_name_registration")
+        form_data = collect_form_data(request.form, EDIT_REQUIRED_FIELDS)
+        missing = validate_form_data(form_data, EDIT_REQUIRED_FIELDS)
 
         if missing:
             flash("資料不完整或包含無效欄位，請檢查後重試。", "danger")
