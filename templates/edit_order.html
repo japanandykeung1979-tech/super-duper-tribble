@@ -5,6 +5,7 @@
   <div class="card-body">
     <h2 class="h5 mb-3">編輯訂單 #{{ order_id }}</h2>
     <form method="post" class="row g-3">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
       <div class="col-12 col-md-6">
         <label class="form-label">英文名</label>
         <input type="text" name="english_name" class="form-control" value="{{ order['english_name'] }}" required>

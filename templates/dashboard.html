@@ -9,6 +9,7 @@
     </div>
 
     <form id="dashboard-form" method="post" class="row g-3 align-items-end">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
       <div class="col-12">
         <div class="border rounded p-3 bg-light-subtle">
           <div class="fw-semibold mb-2">快速欄位（搜尋 + OCR + 新增）</div>
@@ -172,7 +173,7 @@
             <td>
               {% if order['photo_path'] %}
               <a href="{{ url_for('static', filename=order['photo_path']) }}" target="_blank" rel="noopener">
-                <img src="{{ url_for('static', filename=order['photo_path']) }}" alt="訂單相片 {{ order['id'] }}" style="max-width: 80px; max-height: 80px;" class="img-thumbnail">
+                <img src="{{ url_for('static', filename=order['photo_path']) }}" alt="訂單相片 {{ order['id'] }}" class="img-thumbnail order-photo">
               </a>
               {% else %}
               <span class="text-muted">無</span>
@@ -182,6 +183,7 @@
               <div class="d-flex gap-2">
                 <a class="btn btn-sm btn-outline-primary" href="{{ url_for('edit_order', order_id=order['id']) }}">編輯</a>
                 <form method="post" action="{{ url_for('delete_order', order_id=order['id'], **request.args.to_dict(flat=False)) }}" onsubmit="return confirm('確定要刪除此筆訂單嗎？');">
+                  <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
                   <button type="submit" class="btn btn-sm btn-outline-danger">刪除</button>
                 </form>
               </div>
@@ -203,6 +205,7 @@
     const statusEl = document.getElementById('dashboard-ocr-status');
     const aInput = document.getElementById('a-card-input');
     const bInput = document.getElementById('b-card-input');
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
     let targetField = '';
 
     if (form && cameraInput && statusEl && aInput && bInput) {
@@ -229,6 +232,7 @@
           const response = await fetch('/api/dashboard/ocr-add', {
             method: 'POST',
             body: formData,
+            headers: { 'X-CSRF-Token': csrfToken },
           });
           const result = await response.json();
           if (!response.ok) throw new Error(result.error || 'OCR 新增失敗。');
