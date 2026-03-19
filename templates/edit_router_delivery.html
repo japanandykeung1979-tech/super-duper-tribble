@@ -8,7 +8,7 @@
       <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('router_delivery') }}">返回送貨頁面</a>
     </div>
 
-    <form method="post" class="row g-3">
+    <form method="post" enctype="multipart/form-data" class="row g-3">
       <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
 
       <div class="col-12 col-lg-3">
@@ -25,7 +25,7 @@
       </div>
       <div class="col-12 col-lg-3">
         <label class="form-label">舊有寬頻合約期 *</label>
-        <input class="form-control" type="text" name="old_broadband_contract_period" value="{{ delivery['old_broadband_contract_period'] }}" required>
+        <input class="form-control" type="date" name="old_broadband_contract_period" value="{{ delivery['old_broadband_contract_period'] }}" required>
       </div>
 
       <div class="col-12">
@@ -51,7 +51,7 @@
         </select>
       </div>
       <div class="col-12 col-lg-3">
-        <label class="form-label">進度狀態 *</label>
+        <label class="form-label">送貨狀態 *</label>
         <select class="form-select" name="status" required>
           {% for option in delivery_status_options %}
           <option value="{{ option }}" {% if delivery['status'] == option %}selected{% endif %}>{{ option }}</option>
@@ -59,8 +59,20 @@
         </select>
       </div>
       <div class="col-12 col-lg-3">
-        <label class="form-label">銷售負責人</label>
-        <input class="form-control" type="text" name="sales_owner" value="{{ delivery['sales_owner'] or '' }}">
+        <label class="form-label">送貨方式 *</label>
+        <select class="form-select" name="delivery_method" required>
+          {% for option in delivery_status_options %}
+          <option value="{{ option }}" {% if delivery['delivery_method'] == option %}selected{% endif %}>{{ option }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-12 col-lg-3">
+        <label class="form-label">聯絡人</label>
+        <input class="form-control" type="text" name="contact_person" value="{{ delivery['contact_person'] or '' }}">
+      </div>
+      <div class="col-12 col-lg-3">
+        <label class="form-label">單號碼</label>
+        <input class="form-control" type="text" name="order_reference" value="{{ delivery['order_reference'] or '' }}">
       </div>
 
       <div class="col-12">
@@ -73,6 +85,18 @@
       <div class="col-12">
         <label class="form-label">備註（最多 150 字）</label>
         <textarea class="form-control" name="remark" rows="3" maxlength="150">{{ delivery['remark'] or '' }}</textarea>
+      </div>
+      <div class="col-12 col-lg-6">
+        <label class="form-label">現場相片（相機）</label>
+        <input type="file" class="form-control" name="delivery_photo" accept="image/*" capture="environment">
+      </div>
+      <div class="col-12 col-lg-6">
+        {% if delivery['photo_path'] %}
+        <label class="form-label d-block">現有相片</label>
+        <a href="{{ url_for('static', filename=delivery['photo_path']) }}" target="_blank" rel="noopener">
+          <img src="{{ url_for('static', filename=delivery['photo_path']) }}" alt="送貨相片" class="img-thumbnail" style="width: 96px; height: 96px; object-fit: cover;">
+        </a>
+        {% endif %}
       </div>
 
       <div class="col-12 d-flex flex-wrap gap-2">
