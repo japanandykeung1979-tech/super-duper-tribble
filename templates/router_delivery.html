@@ -15,7 +15,7 @@
           <div class="fw-semibold mb-2">快速欄位（搜尋 + 新增）</div>
           <div class="row g-3 align-items-end">
             <div class="col-12 col-lg-3">
-              <label class="form-label">電話號碼 *</label>
+              <label class="form-label">登記號碼 *</label>
               <input type="tel" class="form-control" name="phone_number" value="{{ request.args.get('phone_number','') }}" placeholder="請輸入客戶電話">
             </div>
             <div class="col-12 col-lg-3">
@@ -23,12 +23,28 @@
               <input type="text" class="form-control" name="customer_name" value="{{ request.args.get('customer_name','') }}" placeholder="請輸入客戶名稱">
             </div>
             <div class="col-12 col-lg-3">
+              <label class="form-label">聯絡電話</label>
+              <input type="tel" class="form-control" name="contact_phone" value="{{ request.args.get('contact_phone','') }}" placeholder="可與登記號碼不同">
+            </div>
+            <div class="col-12 col-lg-3">
               <label class="form-label">送貨日期 *</label>
-              <input type="date" class="form-control" name="delivery_date" value="{{ request.args.get('delivery_date','') }}">
+              <div class="d-flex align-items-center gap-2">
+                <input type="date" class="form-control" name="delivery_date" value="{{ request.args.get('delivery_date','') }}">
+                <div class="form-check m-0">
+                  <input class="form-check-input" type="checkbox" value="1" id="sort-delivery-date" name="sort_delivery_date" {% if request.args.get('sort_delivery_date','') == '1' %}checked{% endif %}>
+                  <label class="form-check-label small text-nowrap" for="sort-delivery-date">排序</label>
+                </div>
+              </div>
             </div>
             <div class="col-12 col-lg-3">
               <label class="form-label">舊有寬頻合約期 *</label>
-              <input type="date" class="form-control" name="old_broadband_contract_period" value="{{ request.args.get('old_broadband_contract_period','') }}">
+              <div class="d-flex align-items-center gap-2">
+                <input type="date" class="form-control" name="old_broadband_contract_period" value="{{ request.args.get('old_broadband_contract_period','') }}">
+                <div class="form-check m-0">
+                  <input class="form-check-input" type="checkbox" value="1" id="sort-contract-period" name="sort_contract_period" {% if request.args.get('sort_contract_period','') == '1' %}checked{% endif %}>
+                  <label class="form-check-label small text-nowrap" for="sort-contract-period">排序</label>
+                </div>
+              </div>
             </div>
 
             <div class="col-12 col-lg-6">
@@ -55,15 +71,6 @@
             </div>
 
             <div class="col-12 col-lg-3">
-              <label class="form-label">送貨狀態</label>
-              <select class="form-select" name="status">
-                <option value="">全部狀態</option>
-                {% for option in delivery_status_options %}
-                <option value="{{ option }}" {% if request.args.get('status','') == option %}selected{% endif %}>{{ option }}</option>
-                {% endfor %}
-              </select>
-            </div>
-            <div class="col-12 col-lg-3">
               <label class="form-label">送貨方式 *</label>
               <select class="form-select" name="delivery_method">
                 <option value="">全部方式</option>
@@ -77,6 +84,19 @@
                 <input class="form-check-input" type="checkbox" value="1" id="requires-installation" name="requires_installation" {% if request.args.get('requires_installation','') == '1' %}checked{% endif %}>
                 <label class="form-check-label" for="requires-installation">需要上門安裝</label>
               </div>
+              <div class="form-check mt-1">
+                <input class="form-check-input" type="checkbox" value="1" id="express-delivery" name="express_delivery" {% if request.args.get('express_delivery','') == '1' %}checked{% endif %}>
+                <label class="form-check-label" for="express-delivery">速遞</label>
+              </div>
+            </div>
+            <div class="col-12 col-lg-3">
+              <label class="form-label">工程師級數</label>
+              <select class="form-select" name="engineer_level">
+                <option value="">全部級數</option>
+                {% for option in engineer_level_options %}
+                <option value="{{ option }}" {% if request.args.get('engineer_level','') == option %}selected{% endif %}>{{ option }}</option>
+                {% endfor %}
+              </select>
             </div>
             <div class="col-12 col-lg-3">
               <label class="form-label">聯絡人</label>
@@ -92,17 +112,17 @@
             </div>
             <div class="col-12 col-lg-3">
               <div class="form-check mt-4">
-                <input class="form-check-input" type="checkbox" value="1" id="sort-delivery-date" name="sort_delivery_date" {% if request.args.get('sort_delivery_date','') == '1' %}checked{% endif %}>
-                <label class="form-check-label" for="sort-delivery-date">按送貨日期排序</label>
-              </div>
-              <div class="form-check mt-1">
-                <input class="form-check-input" type="checkbox" value="1" id="sort-contract-period" name="sort_contract_period" {% if request.args.get('sort_contract_period','') == '1' %}checked{% endif %}>
-                <label class="form-check-label" for="sort-contract-period">按舊約期排序</label>
+                <input class="form-check-input" type="checkbox" value="1" id="engineering-blocked" name="engineering_blocked" {% if request.args.get('engineering_blocked','') == '1' %}checked{% endif %}>
+                <label class="form-check-label" for="engineering-blocked">工程有阻塞</label>
               </div>
             </div>
             <div class="col-12">
               <label class="form-label">備註（最多 150 字）</label>
               <textarea class="form-control" name="remark" rows="2" maxlength="150" placeholder="可記錄：電梯限制、收貨窗口、客戶偏好、技術跟進點">{{ request.args.get('remark','') }}</textarea>
+              <div class="form-check mt-2">
+                <input class="form-check-input" type="checkbox" value="1" id="reminder-30-days" name="reminder_30_days" checked>
+                <label class="form-check-label text-muted" for="reminder-30-days">智能提示：30 日內提醒</label>
+              </div>
             </div>
           </div>
         </div>
@@ -111,6 +131,7 @@
       <div class="col-12 d-grid d-md-flex gap-2 quick-actions">
         <button class="btn btn-success" type="submit" name="action" value="add">新增送貨記錄</button>
         <button class="btn btn-primary" type="submit" name="action" value="search">搜尋</button>
+        <a class="btn btn-outline-success" href="{{ url_for('export_router_delivery_whatsapp', **request.args.to_dict(flat=False)) }}" target="_blank" rel="noopener">匯出到 WhatsApp</a>
         <a class="btn btn-outline-secondary" href="{{ url_for('router_delivery') }}">條件歸零</a>
       </div>
     </form>
@@ -124,8 +145,9 @@
       <table class="table table-striped table-hover align-middle">
         <thead>
           <tr>
-            <th>電話號碼</th>
+            <th>登記號碼</th>
             <th>客戶</th>
+            <th>聯絡電話</th>
             <th>送貨日期</th>
             <th>舊有寬頻合約期</th>
             <th>地址</th>
@@ -135,7 +157,9 @@
             <th>單號碼</th>
             <th>送貨方式</th>
             <th>安裝</th>
-            <th>狀態</th>
+            <th>速遞</th>
+            <th>工程級數</th>
+            <th>阻塞</th>
             <th>相片</th>
             <th>備註</th>
             <th>操作</th>
@@ -146,6 +170,7 @@
           <tr>
             <td>{{ item['phone_number'] }}</td>
             <td>{{ item['customer_name'] }}</td>
+            <td>{{ item['contact_phone'] or item['phone_number'] }}</td>
             <td>{{ item['delivery_date'] or '-' }}</td>
             <td>{{ item['old_broadband_contract_period'] or '-' }}</td>
             <td class="cell-note">{{ item['delivery_address'] }}</td>
@@ -155,7 +180,9 @@
             <td>{{ item['order_reference'] or ('#' ~ item['id']) }}</td>
             <td>{{ item['delivery_method'] or '-' }}</td>
             <td>{{ '需要' if item['requires_installation'] else '不需要' }}</td>
-            <td>{{ item['status'] }}</td>
+            <td>{{ '是' if item['express_delivery'] else '否' }}</td>
+            <td>{{ item['engineer_level'] or '初級' }}</td>
+            <td>{% if item['engineering_blocked'] %}<span class="text-danger fw-semibold">有阻塞</span>{% else %}<span class="text-success">正常</span>{% endif %}</td>
             <td>
               {% if item['photo_path'] %}
               <a href="{{ url_for('static', filename=item['photo_path']) }}" target="_blank" rel="noopener">查看</a>
@@ -165,7 +192,7 @@
             </td>
             <td class="cell-note">{{ item['remark'] or '-' }}</td>
             <td class="cell-actions">
-              {% set whatsapp_message = '送貨通知\n單號：' ~ (item['order_reference'] or ('#' ~ item['id'])) ~ '\n客戶：' ~ item['customer_name'] ~ '\n聯絡人：' ~ (item['contact_person'] or item['customer_name']) ~ '\n聯絡電話：' ~ item['phone_number'] ~ '\n送貨日期：' ~ (item['delivery_date'] or '-') ~ '\n送貨時段：' ~ (item['preferred_time_slot'] or '-') ~ '\n送貨地點：' ~ item['delivery_address'] %}
+              {% set whatsapp_message = '送貨通知\n單號：' ~ (item['order_reference'] or ('#' ~ item['id'])) ~ '\n客戶：' ~ item['customer_name'] ~ '\n聯絡人：' ~ (item['contact_person'] or item['customer_name']) ~ '\n聯絡電話：' ~ (item['contact_phone'] or item['phone_number']) ~ '\n送貨日期：' ~ (item['delivery_date'] or '-') ~ '\n送貨時段：' ~ (item['preferred_time_slot'] or '-') ~ '\n送貨地點：' ~ item['delivery_address'] ~ '\n工程級數：' ~ (item['engineer_level'] or '初級') ~ '\n工程狀態：' ~ ('有阻塞' if item['engineering_blocked'] else '正常') %}
               <div class="d-flex gap-2">
                 <a class="btn btn-sm btn-outline-primary" href="{{ url_for('edit_router_delivery', delivery_id=item['id']) }}">編輯</a>
                 <a
@@ -182,7 +209,7 @@
             </td>
           </tr>
           {% else %}
-          <tr><td colspan="16" class="text-center text-muted py-4">沒有符合條件的送貨記錄。</td></tr>
+          <tr><td colspan="18" class="text-center text-muted py-4">沒有符合條件的送貨記錄。</td></tr>
           {% endfor %}
         </tbody>
       </table>

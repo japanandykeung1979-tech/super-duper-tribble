@@ -12,12 +12,16 @@
       <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
 
       <div class="col-12 col-lg-3">
-        <label class="form-label">電話號碼 *</label>
+        <label class="form-label">登記號碼 *</label>
         <input class="form-control" type="tel" name="phone_number" value="{{ delivery['phone_number'] }}" required>
       </div>
       <div class="col-12 col-lg-3">
         <label class="form-label">客戶名稱 *</label>
         <input class="form-control" type="text" name="customer_name" value="{{ delivery['customer_name'] }}" required>
+      </div>
+      <div class="col-12 col-lg-3">
+        <label class="form-label">聯絡電話</label>
+        <input class="form-control" type="tel" name="contact_phone" value="{{ delivery['contact_phone'] or '' }}">
       </div>
       <div class="col-12 col-lg-3">
         <label class="form-label">送貨日期 *</label>
@@ -51,18 +55,18 @@
         </select>
       </div>
       <div class="col-12 col-lg-3">
-        <label class="form-label">送貨狀態 *</label>
-        <select class="form-select" name="status" required>
-          {% for option in delivery_status_options %}
-          <option value="{{ option }}" {% if delivery['status'] == option %}selected{% endif %}>{{ option }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="col-12 col-lg-3">
         <label class="form-label">送貨方式 *</label>
         <select class="form-select" name="delivery_method" required>
           {% for option in delivery_status_options %}
           <option value="{{ option }}" {% if delivery['delivery_method'] == option %}selected{% endif %}>{{ option }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-12 col-lg-3">
+        <label class="form-label">工程師級數</label>
+        <select class="form-select" name="engineer_level">
+          {% for option in engineer_level_options %}
+          <option value="{{ option }}" {% if (delivery['engineer_level'] or '初級') == option %}selected{% endif %}>{{ option }}</option>
           {% endfor %}
         </select>
       </div>
@@ -80,11 +84,23 @@
           <input class="form-check-input" type="checkbox" value="1" id="edit-installation" name="requires_installation" {% if delivery['requires_installation'] %}checked{% endif %}>
           <label class="form-check-label" for="edit-installation">需要上門安裝</label>
         </div>
+        <div class="form-check mt-1">
+          <input class="form-check-input" type="checkbox" value="1" id="edit-express-delivery" name="express_delivery" {% if delivery['express_delivery'] %}checked{% endif %}>
+          <label class="form-check-label" for="edit-express-delivery">速遞</label>
+        </div>
+        <div class="form-check mt-1">
+          <input class="form-check-input" type="checkbox" value="1" id="edit-engineering-blocked" name="engineering_blocked" {% if delivery['engineering_blocked'] %}checked{% endif %}>
+          <label class="form-check-label" for="edit-engineering-blocked">工程有阻塞</label>
+        </div>
       </div>
 
       <div class="col-12">
         <label class="form-label">備註（最多 150 字）</label>
         <textarea class="form-control" name="remark" rows="3" maxlength="150">{{ delivery['remark'] or '' }}</textarea>
+        <div class="form-check mt-2">
+          <input class="form-check-input" type="checkbox" value="1" id="edit-reminder-30-days" name="reminder_30_days" checked>
+          <label class="form-check-label text-muted" for="edit-reminder-30-days">智能提示：30 日內提醒</label>
+        </div>
       </div>
       <div class="col-12 col-lg-6">
         <label class="form-label">現場相片（相機）</label>
