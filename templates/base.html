@@ -63,6 +63,31 @@
     .table-responsive {
       font-size: .9rem;
     }
+    .quick-actions {
+      align-items: stretch;
+    }
+    .quick-actions > * {
+      min-height: 44px;
+    }
+    .quick-actions .dropdown {
+      display: grid;
+    }
+    .quick-actions .dropdown .btn {
+      width: 100%;
+    }
+    .table th,
+    .table td {
+      white-space: nowrap;
+      vertical-align: middle;
+    }
+    .table td.cell-note {
+      min-width: 180px;
+      white-space: normal;
+      word-break: break-word;
+    }
+    .table td.cell-actions {
+      min-width: 120px;
+    }
     .order-photo {
       max-width: 80px;
       max-height: 80px;
@@ -72,6 +97,24 @@
     @media (max-width: 768px) {
       main.container { padding-inline: 0.8rem; }
       .table-responsive { font-size: .82rem; }
+      .quick-actions > * {
+        width: 100%;
+      }
+      .quick-actions .btn,
+      .quick-actions .dropdown .btn {
+        width: 100%;
+      }
+      .quick-actions .dropdown-menu {
+        width: 100%;
+      }
+      .table td.cell-actions .d-flex {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      .table td.cell-actions .btn,
+      .table td.cell-actions form {
+        width: 100%;
+      }
     }
   </style>
 </head>

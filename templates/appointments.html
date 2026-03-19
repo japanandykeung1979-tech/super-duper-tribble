@@ -5,7 +5,7 @@
   <div class="card-body">
     <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-2 mb-3">
       <h2 class="h5 mb-0">未登記及預約簽單 (Lead & Appointment Management)</h2>
-      <small class="text-muted">以 Dashboard 風格快速新增、搜尋與管理預約簽單。</small>
+      <small class="text-muted">保留現有欄位，同步新增/搜尋流程，操作更直接。</small>
     </div>
 
     <form method="post" class="row g-3 align-items-end">
@@ -19,9 +19,9 @@
               <input type="tel" class="form-control" name="phone_number" value="{{ request.args.get('phone_number','') }}" placeholder="請輸入電話號碼">
             </div>
             <div class="col-12 col-lg-3">
-              <label class="form-label">公司名</label>
+              <label class="form-label">公司名稱</label>
               <select class="form-select" name="current_telecom">
-                <option value="">請選擇公司名</option>
+                <option value="">請選擇公司名稱</option>
                 {% for option in telecom_options %}
                 <option value="{{ option }}" {% if request.args.get('current_telecom','') == option %}selected{% endif %}>{{ option }}</option>
                 {% endfor %}
@@ -43,10 +43,10 @@
         </div>
       </div>
 
-      <div class="col-12 d-grid d-md-flex gap-2">
+      <div class="col-12 d-grid d-md-flex gap-2 quick-actions">
         <button class="btn btn-success" type="submit" name="action" value="add">新增紀錄</button>
         <button class="btn btn-primary" type="submit" name="action" value="search">搜尋</button>
-        <a class="btn btn-outline-secondary" href="{{ url_for('appointments') }}">清除條件</a>
+        <a class="btn btn-outline-secondary" href="{{ url_for('appointments') }}">條件歸零</a>
         <div class="dropdown">
           <button class="btn btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
             匯出
@@ -69,7 +69,7 @@
         <thead>
           <tr>
             <th>電話號碼</th>
-            <th>公司名</th>
+            <th>公司名稱</th>
             <th>合約完結日</th>
             <th>月費及用量</th>
             <th>備註</th>
@@ -83,8 +83,8 @@
             <td>{{ item['current_telecom'] }}</td>
             <td>{{ item['contract_end_date'] or '-' }}</td>
             <td>{{ item['current_plan_usage'] or '-' }}</td>
-            <td>{{ item['remark'] or '-' }}</td>
-            <td>
+            <td class="cell-note">{{ item['remark'] or '-' }}</td>
+            <td class="cell-actions">
               <div class="d-flex gap-2">
                 <a class="btn btn-sm btn-outline-primary" href="{{ url_for('edit_appointment', appointment_id=item['id']) }}">編輯</a>
                 <form method="post" action="{{ url_for('delete_appointment', appointment_id=item['id'], **request.args.to_dict(flat=False)) }}" onsubmit="return confirm('確定要刪除此筆紀錄嗎？');">
