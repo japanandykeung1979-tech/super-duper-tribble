@@ -1,0 +1,144 @@
+{% extends 'base.html' %}
+{% block title %}送貨5G Router - Telecom CRM{% endblock %}
+{% block content %}
+<div class="card shadow-sm mb-3">
+  <div class="card-body">
+    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-2 mb-3">
+      <h2 class="h5 mb-0">送貨 5G Router（Delivery Command Center）</h2>
+      <small class="text-muted">結合工程與銷售視角：排程、安裝、跟進一次完成。</small>
+    </div>
+
+    <form method="post" class="row g-3 align-items-end">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+      <div class="col-12">
+        <div class="border rounded p-3 bg-light-subtle">
+          <div class="fw-semibold mb-2">快速欄位（搜尋 + 新增）</div>
+          <div class="row g-3 align-items-end">
+            <div class="col-12 col-lg-3">
+              <label class="form-label">電話號碼 *</label>
+              <input type="tel" class="form-control" name="phone_number" value="{{ request.args.get('phone_number','') }}" placeholder="請輸入客戶電話">
+            </div>
+            <div class="col-12 col-lg-3">
+              <label class="form-label">客戶名稱 *</label>
+              <input type="text" class="form-control" name="customer_name" value="{{ request.args.get('customer_name','') }}" placeholder="請輸入客戶名稱">
+            </div>
+            <div class="col-12 col-lg-3">
+              <label class="form-label">送貨日期 *</label>
+              <input type="date" class="form-control" name="delivery_date" value="{{ request.args.get('delivery_date','') }}">
+            </div>
+            <div class="col-12 col-lg-3">
+              <label class="form-label">舊有寬頻合約期 *</label>
+              <input type="text" class="form-control" name="old_broadband_contract_period" value="{{ request.args.get('old_broadband_contract_period','') }}" placeholder="例如：至 2026-10 / 已完約">
+            </div>
+
+            <div class="col-12 col-lg-6">
+              <label class="form-label">送貨地址 *</label>
+              <input type="text" class="form-control" name="delivery_address" placeholder="大廈 + 單位 + 聯絡備註（如管理處）">
+            </div>
+            <div class="col-12 col-lg-3">
+              <label class="form-label">送貨時段（工程）</label>
+              <select class="form-select" name="preferred_time_slot">
+                <option value="">不限</option>
+                {% for option in delivery_time_slots %}
+                <option value="{{ option }}">{{ option }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-12 col-lg-3">
+              <label class="form-label">Router 型號 *</label>
+              <select class="form-select" name="router_model">
+                <option value="">請選擇型號</option>
+                {% for option in router_model_options %}
+                <option value="{{ option }}" {% if request.args.get('router_model','') == option %}selected{% endif %}>{{ option }}</option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="col-12 col-lg-3">
+              <label class="form-label">進度狀態（銷售）</label>
+              <select class="form-select" name="status">
+                <option value="">全部狀態</option>
+                {% for option in delivery_status_options %}
+                <option value="{{ option }}" {% if request.args.get('status','') == option %}selected{% endif %}>{{ option }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-12 col-lg-3">
+              <label class="form-label">銷售負責人</label>
+              <input type="text" class="form-control" name="sales_owner" placeholder="例如：Chan / Team A">
+            </div>
+            <div class="col-12 col-lg-3">
+              <div class="form-check mt-4">
+                <input class="form-check-input" type="checkbox" value="1" id="requires-installation" name="requires_installation" {% if request.args.get('requires_installation','') == '1' %}checked{% endif %}>
+                <label class="form-check-label" for="requires-installation">需要上門安裝</label>
+              </div>
+            </div>
+            <div class="col-12">
+              <label class="form-label">備註（最多 150 字）</label>
+              <textarea class="form-control" name="remark" rows="2" maxlength="150" placeholder="可記錄：電梯限制、收貨窗口、客戶偏好、技術跟進點">{{ request.args.get('remark','') }}</textarea>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12 d-grid d-md-flex gap-2 quick-actions">
+        <button class="btn btn-success" type="submit" name="action" value="add">新增送貨記錄</button>
+        <button class="btn btn-primary" type="submit" name="action" value="search">搜尋</button>
+        <a class="btn btn-outline-secondary" href="{{ url_for('router_delivery') }}">條件歸零</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-body">
+    <h2 class="h6">送貨列表 ({{ deliveries|length }})</h2>
+    <div class="table-responsive">
+      <table class="table table-striped table-hover align-middle">
+        <thead>
+          <tr>
+            <th>電話號碼</th>
+            <th>客戶</th>
+            <th>送貨日期</th>
+            <th>舊有寬頻合約期</th>
+            <th>地址</th>
+            <th>時段</th>
+            <th>型號</th>
+            <th>安裝</th>
+            <th>狀態</th>
+            <th>備註</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in deliveries %}
+          <tr>
+            <td>{{ item['phone_number'] }}</td>
+            <td>{{ item['customer_name'] }}</td>
+            <td>{{ item['delivery_date'] or '-' }}</td>
+            <td>{{ item['old_broadband_contract_period'] or '-' }}</td>
+            <td class="cell-note">{{ item['delivery_address'] }}</td>
+            <td>{{ item['preferred_time_slot'] or '-' }}</td>
+            <td>{{ item['router_model'] }}</td>
+            <td>{{ '需要' if item['requires_installation'] else '不需要' }}</td>
+            <td>{{ item['status'] }}</td>
+            <td class="cell-note">{{ item['remark'] or '-' }}</td>
+            <td class="cell-actions">
+              <div class="d-flex gap-2">
+                <a class="btn btn-sm btn-outline-primary" href="{{ url_for('edit_router_delivery', delivery_id=item['id']) }}">編輯</a>
+                <form method="post" action="{{ url_for('delete_router_delivery', delivery_id=item['id'], **request.args.to_dict(flat=False)) }}" onsubmit="return confirm('確定要刪除此筆送貨記錄嗎？');">
+                  <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+                  <button type="submit" class="btn btn-sm btn-outline-danger">刪除</button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="11" class="text-center text-muted py-4">沒有符合條件的送貨記錄。</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,85 @@
+{% extends 'base.html' %}
+{% block title %}編輯送貨5G Router - Telecom CRM{% endblock %}
+{% block content %}
+<div class="card shadow-sm">
+  <div class="card-body">
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 mb-3">
+      <h2 class="h5 mb-0">編輯 5G Router 送貨記錄</h2>
+      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('router_delivery') }}">返回送貨頁面</a>
+    </div>
+
+    <form method="post" class="row g-3">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+
+      <div class="col-12 col-lg-3">
+        <label class="form-label">電話號碼 *</label>
+        <input class="form-control" type="tel" name="phone_number" value="{{ delivery['phone_number'] }}" required>
+      </div>
+      <div class="col-12 col-lg-3">
+        <label class="form-label">客戶名稱 *</label>
+        <input class="form-control" type="text" name="customer_name" value="{{ delivery['customer_name'] }}" required>
+      </div>
+      <div class="col-12 col-lg-3">
+        <label class="form-label">送貨日期 *</label>
+        <input class="form-control" type="date" name="delivery_date" value="{{ delivery['delivery_date'] }}" required>
+      </div>
+      <div class="col-12 col-lg-3">
+        <label class="form-label">舊有寬頻合約期 *</label>
+        <input class="form-control" type="text" name="old_broadband_contract_period" value="{{ delivery['old_broadband_contract_period'] }}" required>
+      </div>
+
+      <div class="col-12">
+        <label class="form-label">送貨地址 *</label>
+        <input class="form-control" type="text" name="delivery_address" value="{{ delivery['delivery_address'] }}" required>
+      </div>
+
+      <div class="col-12 col-lg-3">
+        <label class="form-label">送貨時段</label>
+        <select class="form-select" name="preferred_time_slot">
+          <option value="">不限</option>
+          {% for option in delivery_time_slots %}
+          <option value="{{ option }}" {% if delivery['preferred_time_slot'] == option %}selected{% endif %}>{{ option }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-12 col-lg-3">
+        <label class="form-label">Router 型號 *</label>
+        <select class="form-select" name="router_model" required>
+          {% for option in router_model_options %}
+          <option value="{{ option }}" {% if delivery['router_model'] == option %}selected{% endif %}>{{ option }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-12 col-lg-3">
+        <label class="form-label">進度狀態 *</label>
+        <select class="form-select" name="status" required>
+          {% for option in delivery_status_options %}
+          <option value="{{ option }}" {% if delivery['status'] == option %}selected{% endif %}>{{ option }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-12 col-lg-3">
+        <label class="form-label">銷售負責人</label>
+        <input class="form-control" type="text" name="sales_owner" value="{{ delivery['sales_owner'] or '' }}">
+      </div>
+
+      <div class="col-12">
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" value="1" id="edit-installation" name="requires_installation" {% if delivery['requires_installation'] %}checked{% endif %}>
+          <label class="form-check-label" for="edit-installation">需要上門安裝</label>
+        </div>
+      </div>
+
+      <div class="col-12">
+        <label class="form-label">備註（最多 150 字）</label>
+        <textarea class="form-control" name="remark" rows="3" maxlength="150">{{ delivery['remark'] or '' }}</textarea>
+      </div>
+
+      <div class="col-12 d-flex flex-wrap gap-2">
+        <button class="btn btn-primary" type="submit">儲存變更</button>
+        <a class="btn btn-outline-secondary" href="{{ url_for('router_delivery') }}">取消</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
