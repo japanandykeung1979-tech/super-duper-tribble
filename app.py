@@ -974,7 +974,12 @@ def appointments():
         if action == "add":
             has_3hk = request.form.get("telecom_3hk") == "1"
             has_other = request.form.get("telecom_other") == "1"
-            other_company_name = request.form.get("other_company_name", "").strip()
+            # `appointments.html` 使用 `current_telecom`，而編輯頁仍沿用 `other_company_name`。
+            # 兩者都接受，避免新舊表單欄位不一致導致新增失敗。
+            other_company_name = (
+                request.form.get("current_telecom", "").strip()
+                or request.form.get("other_company_name", "").strip()
+            )
 
             if has_3hk and has_other:
                 flash("請只可選擇一個電訊商分類。", "danger")
