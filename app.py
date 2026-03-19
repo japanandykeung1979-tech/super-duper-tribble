@@ -91,6 +91,15 @@ def get_db() -> sqlite3.Connection:
     return g.db
 
 
+def add_missing_columns(db: sqlite3.Connection, table_name: str, required_columns: dict[str, str]) -> None:
+    existing_columns = {
+        row[1] for row in db.execute(f"PRAGMA table_info({table_name})").fetchall()
+    }
+    for column, column_type in required_columns.items():
+        if column not in existing_columns:
+            db.execute(f"ALTER TABLE {table_name} ADD COLUMN {column} {column_type}")
+
+
 def init_db() -> None:
     db = sqlite3.connect(DATABASE)
     db.execute(
@@ -162,9 +171,6 @@ def init_db() -> None:
         """
     )
 
-    existing_columns = {
-        row[1] for row in db.execute("PRAGMA table_info(orders)").fetchall()
-    }
     required_columns = {
         "a_card_number": "TEXT",
         "b_card_number": "TEXT",
@@ -177,24 +183,14 @@ def init_db() -> None:
         "remark": "TEXT",
         "photo_path": "TEXT",
     }
-    for column, column_type in required_columns.items():
-        if column not in existing_columns:
-            db.execute(f"ALTER TABLE orders ADD COLUMN {column} {column_type}")
+    add_missing_columns(db, "orders", required_columns)
 
-    existing_appointment_columns = {
-        row[1] for row in db.execute("PRAGMA table_info(appointments)").fetchall()
-    }
     required_appointment_columns = {
         "telecom_category": "TEXT NOT NULL DEFAULT '其他公司'",
         "photo_path": "TEXT",
     }
-    for column, column_type in required_appointment_columns.items():
-        if column not in existing_appointment_columns:
-            db.execute(f"ALTER TABLE appointments ADD COLUMN {column} {column_type}")
+    add_missing_columns(db, "appointments", required_appointment_columns)
 
-    existing_router_columns = {
-        row[1] for row in db.execute("PRAGMA table_info(router_deliveries)").fetchall()
-    }
     required_router_columns = {
         "contact_person": "TEXT",
         "contact_phone": "TEXT",
@@ -215,9 +211,7 @@ def init_db() -> None:
         "photo_path": "TEXT",
         "remark": "TEXT",
     }
-    for column, column_type in required_router_columns.items():
-        if column not in existing_router_columns:
-            db.execute(f"ALTER TABLE router_deliveries ADD COLUMN {column} {column_type}")
+    add_missing_columns(db, "router_deliveries", required_router_columns)
 
     db.executescript(
         """
@@ -662,6 +656,23 @@ def save_uploaded_photo(uploaded_file) -> str:
     return str(Path("uploads") / unique_name)
 
 
+def get_uploaded_image_extension(uploaded_file) -> str:
+    filename = secure_filename(uploaded_file.filename or "")
+    if not filename or "." not in filename:
+        return ""
+    extension = filename.rsplit(".", 1)[-1].lower()
+    if extension not in ALLOWED_IMAGE_EXTENSIONS:
+        return ""
+    return extension
+
+
+def map_ocr_runtime_error(error: RuntimeError) -> tuple[dict[str, str], int]:
+    message = str(error)
+    if "未安裝" in message or "找不到 Tesseract" in message:
+        return {"error": message}, 503
+    return {"error": "OCR 辨識失敗，請嘗試更清晰的圖片。"}, 500
+
+
 def save_photo_bytes(image_bytes: bytes, extension: str) -> str:
     if extension not in ALLOWED_IMAGE_EXTENSIONS:
         return ""
@@ -940,8 +951,7 @@ def ocr_scan():
     if not uploaded_photo or not uploaded_photo.filename:
         return jsonify({"error": "請先上傳圖片檔案。"}), 400
 
-    filename = secure_filename(uploaded_photo.filename)
-    extension = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    extension = get_uploaded_image_extension(uploaded_photo)
     if extension not in ALLOWED_IMAGE_EXTENSIONS:
         return jsonify({"error": "檔案格式不支援，請上傳圖片。"}), 400
 
@@ -949,9 +959,8 @@ def ocr_scan():
         image_bytes = uploaded_photo.read()
         ocr_text = run_ocr_on_image_bytes(image_bytes)
     except RuntimeError as error:
-        if "未安裝" in str(error) or "找不到 Tesseract" in str(error):
-            return jsonify({"error": str(error)}), 503
-        return jsonify({"error": "OCR 辨識失敗，請嘗試更清晰的圖片。"}), 500
+        payload, status_code = map_ocr_runtime_error(error)
+        return jsonify(payload), status_code
 
     sim_card_number = extract_sim_card_number(ocr_text)
     hkid_fields = parse_hkid_ocr_fields(ocr_text)
@@ -977,8 +986,7 @@ def dashboard_ocr_add():
     if not uploaded_photo or not uploaded_photo.filename:
         return jsonify({"error": "請先拍照或選擇相片。"}), 400
 
-    filename = secure_filename(uploaded_photo.filename)
-    extension = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    extension = get_uploaded_image_extension(uploaded_photo)
     if extension not in ALLOWED_IMAGE_EXTENSIONS:
         return jsonify({"error": "檔案格式不支援，請上傳圖片。"}), 400
 
@@ -990,9 +998,8 @@ def dashboard_ocr_add():
     try:
         ocr_text = run_ocr_on_image_bytes(image_bytes)
     except RuntimeError as error:
-        if "未安裝" in str(error) or "找不到 Tesseract" in str(error):
-            return jsonify({"error": str(error)}), 503
-        return jsonify({"error": "OCR 辨識失敗，請嘗試更清晰的圖片。"}), 500
+        payload, status_code = map_ocr_runtime_error(error)
+        return jsonify(payload), status_code
 
     recognized_number = extract_sim_card_number(ocr_text)
     form_data = build_dashboard_order_data(request.form)
@@ -1020,8 +1027,7 @@ def router_delivery_ocr():
     if not uploaded_photo or not uploaded_photo.filename:
         return jsonify({"error": "請先上傳合約圖片。"}), 400
 
-    filename = secure_filename(uploaded_photo.filename)
-    extension = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    extension = get_uploaded_image_extension(uploaded_photo)
     if extension not in ALLOWED_IMAGE_EXTENSIONS:
         return jsonify({"error": "檔案格式不支援，請上傳圖片。"}), 400
 
@@ -1029,9 +1035,8 @@ def router_delivery_ocr():
         image_bytes = uploaded_photo.read()
         ocr_text = run_ocr_on_image_bytes(image_bytes)
     except RuntimeError as error:
-        if "未安裝" in str(error) or "找不到 Tesseract" in str(error):
-            return jsonify({"error": str(error)}), 503
-        return jsonify({"error": "OCR 辨識失敗，請嘗試更清晰的圖片。"}), 500
+        payload, status_code = map_ocr_runtime_error(error)
+        return jsonify(payload), status_code
 
     parsed = parse_router_contract_ocr_fields(ocr_text)
     return jsonify({"fields": parsed, "raw_text": ocr_text})
