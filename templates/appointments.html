@@ -8,7 +8,7 @@
       <small class="text-muted">保留現有欄位，同步新增/搜尋流程，操作更直接。</small>
     </div>
 
-    <form method="post" class="row g-3 align-items-end">
+    <form method="post" enctype="multipart/form-data" class="row g-3 align-items-end">
       <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
       <div class="col-12">
         <div class="border rounded p-3 bg-light-subtle">
@@ -20,9 +20,9 @@
             </div>
             <div class="col-12 col-lg-3">
               <label class="form-label">公司名稱</label>
-              <select class="form-select" name="current_telecom">
+              <select class="form-select" name="current_telecom" id="other-company-name">
                 <option value="">請選擇公司名稱</option>
-                {% for option in telecom_options %}
+                {% for option in other_company_options %}
                 <option value="{{ option }}" {% if request.args.get('current_telecom','') == option %}selected{% endif %}>{{ option }}</option>
                 {% endfor %}
               </select>
@@ -34,6 +34,25 @@
             <div class="col-12 col-lg-3">
               <label class="form-label">交緊的月費以及用量</label>
               <input type="text" class="form-control" name="current_plan_usage" value="{{ request.args.get('current_plan_usage','') }}" placeholder="例如：$238 / 50GB">
+            </div>
+            <div class="col-12">
+              <label class="form-label mb-1">電訊商分類</label>
+              <div class="d-flex flex-wrap gap-3 align-items-center">
+                <div class="form-check">
+                  <input class="form-check-input telecom-category-toggle" type="checkbox" name="telecom_3hk" id="telecom-3hk" value="1" {% if request.args.get('telecom_category') == '3HK' %}checked{% endif %}>
+                  <label class="form-check-label" for="telecom-3hk">3HK</label>
+                </div>
+                <div class="form-check">
+                  <input class="form-check-input telecom-category-toggle" type="checkbox" name="telecom_other" id="telecom-other" value="1" {% if request.args.get('telecom_category') == '其他公司' %}checked{% endif %}>
+                  <label class="form-check-label" for="telecom-other">其他公司</label>
+                </div>
+              </div>
+              <input type="hidden" name="telecom_category" id="telecom-category-hidden" value="{{ request.args.get('telecom_category','') }}">
+            </div>
+            <div class="col-12 col-lg-6">
+              <label class="form-label">客戶相片（可用相機）</label>
+              <input type="file" class="form-control" name="appointment_photo" accept="image/*" capture="environment">
+              <div class="form-text">可即場拍照或從相簿上傳，相片會顯示於結果列表。</div>
             </div>
             <div class="col-12">
               <label class="form-label">備註（最多 100 字）</label>
@@ -69,9 +88,11 @@
         <thead>
           <tr>
             <th>電話號碼</th>
+            <th>電訊商</th>
             <th>公司名稱</th>
             <th>合約完結日</th>
             <th>月費及用量</th>
+            <th>相片</th>
             <th>備註</th>
             <th>操作</th>
           </tr>
@@ -80,9 +101,17 @@
           {% for item in appointments %}
           <tr>
             <td>{{ item['phone_number'] }}</td>
+            <td>{{ item['telecom_category'] or '-' }}</td>
             <td>{{ item['current_telecom'] }}</td>
             <td>{{ item['contract_end_date'] or '-' }}</td>
             <td>{{ item['current_plan_usage'] or '-' }}</td>
+            <td>
+              {% if item['photo_path'] %}
+              <img src="{{ url_for('static', filename=item['photo_path']) }}" alt="客戶相片" class="img-thumbnail" style="width: 70px; height: 70px; object-fit: cover;">
+              {% else %}
+              -
+              {% endif %}
+            </td>
             <td class="cell-note">{{ item['remark'] or '-' }}</td>
             <td class="cell-actions">
               <div class="d-flex gap-2">
@@ -95,11 +124,43 @@
             </td>
           </tr>
           {% else %}
-          <tr><td colspan="6" class="text-center text-muted py-4">沒有符合條件的記錄。</td></tr>
+          <tr><td colspan="8" class="text-center text-muted py-4">沒有符合條件的記錄。</td></tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
   </div>
 </div>
+<script>
+  (() => {
+    const checkbox3hk = document.getElementById('telecom-3hk');
+    const checkboxOther = document.getElementById('telecom-other');
+    const companySelect = document.getElementById('other-company-name');
+    const hiddenCategory = document.getElementById('telecom-category-hidden');
+
+    if (!checkbox3hk || !checkboxOther || !companySelect || !hiddenCategory) return;
+
+    const sync = (source) => {
+      if (source === checkbox3hk && checkbox3hk.checked) checkboxOther.checked = false;
+      if (source === checkboxOther && checkboxOther.checked) checkbox3hk.checked = false;
+
+      if (checkbox3hk.checked) {
+        hiddenCategory.value = '3HK';
+        companySelect.value = '3HK';
+        companySelect.disabled = true;
+      } else if (checkboxOther.checked) {
+        hiddenCategory.value = '其他公司';
+        companySelect.disabled = false;
+        if (companySelect.value === '3HK') companySelect.value = '';
+      } else {
+        hiddenCategory.value = '';
+        companySelect.disabled = false;
+      }
+    };
+
+    checkbox3hk.addEventListener('change', () => sync(checkbox3hk));
+    checkboxOther.addEventListener('change', () => sync(checkboxOther));
+    sync();
+  })();
+</script>
 {% endblock %}
