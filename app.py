@@ -31,6 +31,9 @@ PLAN_OPTIONS = ["5G Basic", "5G Premium", "4.5G Value", "Family Plan", "Data SIM
 TIME_OPTIONS = ["AM", "PM"]
 APPOINTMENT_TELECOM_OPTIONS = ["CSL", "SmarTone", "中國移動", "3HK", "中國聯通", "電訊數碼"]
 APPOINTMENT_OTHER_COMPANY_OPTIONS = ["SmarTone", "CSL", "China Mobile", "中國聯通", "電訊數碼", "其他"]
+ROUTER_MODEL_OPTIONS = ["5G Router Lite", "5G Router Pro", "5G Router Max"]
+DELIVERY_TIME_SLOT_OPTIONS = ["09:00-13:00", "13:00-18:00", "18:00-21:00"]
+DELIVERY_STATUS_OPTIONS = ["待確認", "已約送貨", "已送達", "需技術跟進", "已取消"]
 DATE_FIELDS = ["contract_end_date", "transfer_out_date", "start_date", "replacement_date"]
 MNP_REQUIRED_FIELDS = [
     "english_name",
@@ -119,6 +122,26 @@ def init_db() -> None:
         """
     )
 
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS router_deliveries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            phone_number TEXT NOT NULL,
+            customer_name TEXT NOT NULL,
+            delivery_address TEXT NOT NULL,
+            delivery_date TEXT,
+            old_broadband_contract_period TEXT,
+            preferred_time_slot TEXT,
+            router_model TEXT NOT NULL,
+            requires_installation INTEGER NOT NULL DEFAULT 0,
+            sales_owner TEXT,
+            status TEXT NOT NULL DEFAULT '待確認',
+            remark TEXT,
+            created_at TEXT NOT NULL
+        )
+        """
+    )
+
     existing_columns = {
         row[1] for row in db.execute("PRAGMA table_info(orders)").fetchall()
     }
@@ -149,6 +172,22 @@ def init_db() -> None:
         if column not in existing_appointment_columns:
             db.execute(f"ALTER TABLE appointments ADD COLUMN {column} {column_type}")
 
+    existing_router_columns = {
+        row[1] for row in db.execute("PRAGMA table_info(router_deliveries)").fetchall()
+    }
+    required_router_columns = {
+        "delivery_date": "TEXT",
+        "old_broadband_contract_period": "TEXT",
+        "preferred_time_slot": "TEXT",
+        "requires_installation": "INTEGER NOT NULL DEFAULT 0",
+        "sales_owner": "TEXT",
+        "status": "TEXT NOT NULL DEFAULT '待確認'",
+        "remark": "TEXT",
+    }
+    for column, column_type in required_router_columns.items():
+        if column not in existing_router_columns:
+            db.execute(f"ALTER TABLE router_deliveries ADD COLUMN {column} {column_type}")
+
     db.executescript(
         """
         CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at DESC);
@@ -163,6 +202,9 @@ def init_db() -> None:
         CREATE INDEX IF NOT EXISTS idx_appointments_created_at ON appointments(created_at DESC);
         CREATE INDEX IF NOT EXISTS idx_appointments_phone_number ON appointments(phone_number);
         CREATE INDEX IF NOT EXISTS idx_appointments_contract_end_date ON appointments(contract_end_date);
+        CREATE INDEX IF NOT EXISTS idx_router_deliveries_created_at ON router_deliveries(created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_router_deliveries_phone_number ON router_deliveries(phone_number);
+        CREATE INDEX IF NOT EXISTS idx_router_deliveries_delivery_date ON router_deliveries(delivery_date);
         """
     )
 
@@ -379,6 +421,81 @@ def insert_appointment(data: dict[str, Any]) -> None:
 def fetch_appointment(appointment_id: int) -> sqlite3.Row | None:
     db = get_db()
     return db.execute("SELECT * FROM appointments WHERE id = ?", (appointment_id,)).fetchone()
+
+
+def build_router_delivery_filters(args) -> tuple[str, list[Any]]:
+    query = "SELECT * FROM router_deliveries WHERE 1=1"
+    params: list[Any] = []
+
+    phone_number = args.get("phone_number", "").strip()
+    customer_name = args.get("customer_name", "").strip()
+    delivery_date = args.get("delivery_date", "").strip()
+    status = args.get("status", "").strip()
+    router_model = args.get("router_model", "").strip()
+    requires_installation = args.get("requires_installation", "").strip()
+    old_broadband_contract_period = args.get("old_broadband_contract_period", "").strip()
+    remark = args.get("remark", "").strip()
+
+    if phone_number:
+        query += " AND phone_number LIKE ?"
+        params.append(f"%{phone_number}%")
+    if customer_name:
+        query += " AND customer_name LIKE ?"
+        params.append(f"%{customer_name}%")
+    if delivery_date:
+        query += " AND delivery_date = ?"
+        params.append(delivery_date)
+    if status in DELIVERY_STATUS_OPTIONS:
+        query += " AND status = ?"
+        params.append(status)
+    if router_model in ROUTER_MODEL_OPTIONS:
+        query += " AND router_model = ?"
+        params.append(router_model)
+    if requires_installation in {"0", "1"}:
+        query += " AND requires_installation = ?"
+        params.append(int(requires_installation))
+    if old_broadband_contract_period:
+        query += " AND old_broadband_contract_period LIKE ?"
+        params.append(f"%{old_broadband_contract_period}%")
+    if remark:
+        query += " AND remark LIKE ?"
+        params.append(f"%{remark}%")
+
+    query += " ORDER BY CASE WHEN delivery_date IS NULL OR delivery_date = '' THEN 1 ELSE 0 END, delivery_date ASC, created_at DESC"
+    return query, params
+
+
+def insert_router_delivery(data: dict[str, Any]) -> None:
+    db = get_db()
+    db.execute(
+        """
+        INSERT INTO router_deliveries (
+            phone_number, customer_name, delivery_address, delivery_date,
+            old_broadband_contract_period, preferred_time_slot, router_model,
+            requires_installation, sales_owner, status, remark, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            data["phone_number"],
+            data["customer_name"],
+            data["delivery_address"],
+            data.get("delivery_date", ""),
+            data.get("old_broadband_contract_period", ""),
+            data.get("preferred_time_slot", ""),
+            data["router_model"],
+            data.get("requires_installation", 0),
+            data.get("sales_owner", ""),
+            data.get("status", "待確認"),
+            data.get("remark", "")[:150],
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        ),
+    )
+    db.commit()
+
+
+def fetch_router_delivery(delivery_id: int) -> sqlite3.Row | None:
+    db = get_db()
+    return db.execute("SELECT * FROM router_deliveries WHERE id = ?", (delivery_id,)).fetchone()
 
 
 def collect_form_data(form, required_fields: list[str]) -> dict[str, Any]:
@@ -980,6 +1097,179 @@ def export_appointments():
             "Content-Disposition": f"attachment; filename=appointments_{filename_time}.xls",
         },
     )
+
+
+@app.route("/router-delivery", methods=["GET", "POST"])
+@login_required
+def router_delivery():
+    if request.method == "POST":
+        action = request.form.get("action", "search")
+
+        if action == "search":
+            search_params = {
+                "phone_number": request.form.get("phone_number", "").strip(),
+                "customer_name": request.form.get("customer_name", "").strip(),
+                "delivery_date": request.form.get("delivery_date", "").strip(),
+                "status": request.form.get("status", "").strip(),
+                "router_model": request.form.get("router_model", "").strip(),
+                "requires_installation": "1" if request.form.get("requires_installation") else "",
+                "old_broadband_contract_period": request.form.get("old_broadband_contract_period", "").strip(),
+                "remark": request.form.get("remark", "").strip(),
+            }
+            cleaned_params = {key: value for key, value in search_params.items() if value}
+            return redirect(url_for("router_delivery", **cleaned_params))
+
+        if action == "add":
+            form_data = {
+                "phone_number": request.form.get("phone_number", "").strip(),
+                "customer_name": request.form.get("customer_name", "").strip(),
+                "delivery_address": request.form.get("delivery_address", "").strip(),
+                "delivery_date": request.form.get("delivery_date", "").strip(),
+                "old_broadband_contract_period": request.form.get("old_broadband_contract_period", "").strip(),
+                "preferred_time_slot": request.form.get("preferred_time_slot", "").strip(),
+                "router_model": request.form.get("router_model", "").strip(),
+                "requires_installation": 1 if request.form.get("requires_installation") else 0,
+                "sales_owner": request.form.get("sales_owner", "").strip(),
+                "status": request.form.get("status", "").strip() or "待確認",
+                "remark": request.form.get("remark", "").strip()[:150],
+            }
+
+            if (
+                not form_data["phone_number"]
+                or not form_data["customer_name"]
+                or not form_data["delivery_address"]
+                or not form_data["delivery_date"]
+                or not form_data["old_broadband_contract_period"]
+                or form_data["router_model"] not in ROUTER_MODEL_OPTIONS
+                or form_data["status"] not in DELIVERY_STATUS_OPTIONS
+            ):
+                flash("請填妥必要欄位（電話、客戶、地址、送貨日期、舊有寬頻合約期）。", "danger")
+                return redirect(url_for("router_delivery", **request.args.to_dict(flat=False)))
+
+            if form_data["preferred_time_slot"] and form_data["preferred_time_slot"] not in DELIVERY_TIME_SLOT_OPTIONS:
+                flash("請選擇有效的送貨時段。", "danger")
+                return redirect(url_for("router_delivery", **request.args.to_dict(flat=False)))
+
+            insert_router_delivery(form_data)
+            flash("已新增 5G Router 送貨記錄。", "success")
+            return redirect(url_for("router_delivery", **request.args.to_dict(flat=False)))
+
+        flash("不支援的操作。", "danger")
+        return redirect(url_for("router_delivery", **request.args.to_dict(flat=False)))
+
+    query, params = build_router_delivery_filters(request.args)
+    db = get_db()
+    deliveries = db.execute(query, params).fetchall()
+    return render_template(
+        "router_delivery.html",
+        deliveries=deliveries,
+        router_model_options=ROUTER_MODEL_OPTIONS,
+        delivery_time_slots=DELIVERY_TIME_SLOT_OPTIONS,
+        delivery_status_options=DELIVERY_STATUS_OPTIONS,
+    )
+
+
+@app.route("/router-delivery/<int:delivery_id>/edit", methods=["GET", "POST"])
+@login_required
+def edit_router_delivery(delivery_id: int):
+    delivery = fetch_router_delivery(delivery_id)
+    if delivery is None:
+        flash("找不到該筆送貨記錄。", "danger")
+        return redirect(url_for("router_delivery"))
+
+    if request.method == "POST":
+        form_data = {
+            "phone_number": request.form.get("phone_number", "").strip(),
+            "customer_name": request.form.get("customer_name", "").strip(),
+            "delivery_address": request.form.get("delivery_address", "").strip(),
+            "delivery_date": request.form.get("delivery_date", "").strip(),
+            "old_broadband_contract_period": request.form.get("old_broadband_contract_period", "").strip(),
+            "preferred_time_slot": request.form.get("preferred_time_slot", "").strip(),
+            "router_model": request.form.get("router_model", "").strip(),
+            "requires_installation": 1 if request.form.get("requires_installation") else 0,
+            "sales_owner": request.form.get("sales_owner", "").strip(),
+            "status": request.form.get("status", "").strip(),
+            "remark": request.form.get("remark", "").strip()[:150],
+        }
+        if (
+            not form_data["phone_number"]
+            or not form_data["customer_name"]
+            or not form_data["delivery_address"]
+            or not form_data["delivery_date"]
+            or not form_data["old_broadband_contract_period"]
+            or form_data["router_model"] not in ROUTER_MODEL_OPTIONS
+            or form_data["status"] not in DELIVERY_STATUS_OPTIONS
+        ):
+            flash("資料不完整或包含無效欄位，請檢查後重試。", "danger")
+            return render_template(
+                "edit_router_delivery.html",
+                delivery=form_data,
+                delivery_id=delivery_id,
+                router_model_options=ROUTER_MODEL_OPTIONS,
+                delivery_time_slots=DELIVERY_TIME_SLOT_OPTIONS,
+                delivery_status_options=DELIVERY_STATUS_OPTIONS,
+            )
+
+        if form_data["preferred_time_slot"] and form_data["preferred_time_slot"] not in DELIVERY_TIME_SLOT_OPTIONS:
+            flash("請選擇有效的送貨時段。", "danger")
+            return render_template(
+                "edit_router_delivery.html",
+                delivery=form_data,
+                delivery_id=delivery_id,
+                router_model_options=ROUTER_MODEL_OPTIONS,
+                delivery_time_slots=DELIVERY_TIME_SLOT_OPTIONS,
+                delivery_status_options=DELIVERY_STATUS_OPTIONS,
+            )
+
+        db = get_db()
+        db.execute(
+            """
+            UPDATE router_deliveries
+            SET phone_number = ?, customer_name = ?, delivery_address = ?, delivery_date = ?,
+                old_broadband_contract_period = ?, preferred_time_slot = ?, router_model = ?,
+                requires_installation = ?, sales_owner = ?, status = ?, remark = ?
+            WHERE id = ?
+            """,
+            (
+                form_data["phone_number"],
+                form_data["customer_name"],
+                form_data["delivery_address"],
+                form_data["delivery_date"],
+                form_data["old_broadband_contract_period"],
+                form_data["preferred_time_slot"],
+                form_data["router_model"],
+                form_data["requires_installation"],
+                form_data["sales_owner"],
+                form_data["status"],
+                form_data["remark"],
+                delivery_id,
+            ),
+        )
+        db.commit()
+        flash("送貨記錄已更新。", "success")
+        return redirect(url_for("router_delivery"))
+
+    return render_template(
+        "edit_router_delivery.html",
+        delivery=delivery,
+        delivery_id=delivery_id,
+        router_model_options=ROUTER_MODEL_OPTIONS,
+        delivery_time_slots=DELIVERY_TIME_SLOT_OPTIONS,
+        delivery_status_options=DELIVERY_STATUS_OPTIONS,
+    )
+
+
+@app.post("/router-delivery/<int:delivery_id>/delete")
+@login_required
+def delete_router_delivery(delivery_id: int):
+    db = get_db()
+    cursor = db.execute("DELETE FROM router_deliveries WHERE id = ?", (delivery_id,))
+    db.commit()
+    if cursor.rowcount:
+        flash("送貨記錄已刪除。", "success")
+    else:
+        flash("找不到要刪除的送貨記錄。", "danger")
+    return redirect(url_for("router_delivery", **request.args.to_dict(flat=False)))
 
 
 @app.get("/dashboard/export")
