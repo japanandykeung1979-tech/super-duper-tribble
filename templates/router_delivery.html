@@ -5,53 +5,69 @@
   <div class="card-body">
     <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-2 mb-3">
       <h2 class="h5 mb-0">送貨 5G Router（Delivery Command Center）</h2>
-      <small class="text-muted">結合工程與銷售視角：排程、安裝、跟進一次完成。</small>
+      <small class="text-muted">OCR 自動填表 + 排程 + 一鍵 WhatsApp 通知</small>
     </div>
 
-    <form method="post" enctype="multipart/form-data" class="row g-3 align-items-end">
+    <form method="post" enctype="multipart/form-data" class="row g-3 align-items-end" id="router-delivery-form">
       <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+
       <div class="col-12">
         <div class="border rounded p-3 bg-light-subtle">
-          <div class="fw-semibold mb-2">快速欄位（搜尋 + 新增）</div>
+          <div class="fw-semibold mb-2">客戶資料（可先 OCR）</div>
           <div class="row g-3 align-items-end">
-            <div class="col-12 col-lg-3">
+            <div class="col-12 col-lg-4">
+              <label class="form-label">合約相片 OCR</label>
+              <div class="input-group">
+                <input type="file" class="form-control" id="ocr-contract-photo" accept="image/*">
+                <button class="btn btn-outline-primary" type="button" id="ocr-fill-btn">OCR 自動填表</button>
+              </div>
+              <div class="form-text" id="ocr-status">上載公司資料單後，自動填入以下欄位。</div>
+            </div>
+            <div class="col-12 col-lg-2">
               <label class="form-label">登記號碼 *</label>
-              <input type="tel" class="form-control" name="phone_number" value="{{ request.args.get('phone_number','') }}" placeholder="請輸入客戶電話">
+              <input type="tel" class="form-control" name="phone_number" value="{{ request.args.get('phone_number','') }}" placeholder="客戶電話">
             </div>
-            <div class="col-12 col-lg-3">
-              <label class="form-label">客戶名稱 *</label>
-              <input type="text" class="form-control" name="customer_name" value="{{ request.args.get('customer_name','') }}" placeholder="請輸入客戶名稱">
-            </div>
-            <div class="col-12 col-lg-3">
+            <div class="col-12 col-lg-2">
               <label class="form-label">聯絡電話</label>
-              <input type="tel" class="form-control" name="contact_phone" value="{{ request.args.get('contact_phone','') }}" placeholder="可與登記號碼不同">
+              <input type="tel" class="form-control" name="contact_phone" value="{{ request.args.get('contact_phone','') }}" placeholder="可不同">
+            </div>
+            <div class="col-12 col-lg-2">
+              <label class="form-label">寬頻號碼</label>
+              <input type="text" class="form-control" name="broadband_number" value="{{ request.args.get('broadband_number','') }}">
+            </div>
+            <div class="col-12 col-lg-2">
+              <label class="form-label">客戶姓名（登記名稱）*</label>
+              <input type="text" class="form-control" name="customer_name" value="{{ request.args.get('customer_name','') }}">
             </div>
             <div class="col-12 col-lg-3">
-              <label class="form-label">送貨日期 *</label>
-              <div class="d-flex align-items-center gap-2">
-                <input type="date" class="form-control" name="delivery_date" value="{{ request.args.get('delivery_date','') }}">
-                <div class="form-check m-0">
-                  <input class="form-check-input" type="checkbox" value="1" id="sort-delivery-date" name="sort_delivery_date" {% if request.args.get('sort_delivery_date','') == '1' %}checked{% endif %}>
-                  <label class="form-check-label small text-nowrap" for="sort-delivery-date">排序</label>
-                </div>
-              </div>
+              <label class="form-label">登記服務號碼</label>
+              <input type="text" class="form-control" name="registration_service_number" value="{{ request.args.get('registration_service_number','') }}">
             </div>
             <div class="col-12 col-lg-3">
-              <label class="form-label">舊有寬頻合約期 *</label>
-              <div class="d-flex align-items-center gap-2">
-                <input type="date" class="form-control" name="old_broadband_contract_period" value="{{ request.args.get('old_broadband_contract_period','') }}">
-                <div class="form-check m-0">
-                  <input class="form-check-input" type="checkbox" value="1" id="sort-contract-period" name="sort_contract_period" {% if request.args.get('sort_contract_period','') == '1' %}checked{% endif %}>
-                  <label class="form-check-label small text-nowrap" for="sort-contract-period">排序</label>
-                </div>
-              </div>
+              <label class="form-label">Sssa Number</label>
+              <input type="text" class="form-control" name="sssa_number" value="{{ request.args.get('sssa_number','') }}">
+            </div>
+            <div class="col-12 col-lg-6">
+              <label class="form-label">客戶地址（合約地址）</label>
+              <textarea class="form-control" name="customer_address" rows="2" placeholder="OCR 會優先填此欄">{{ request.args.get('customer_address','') }}</textarea>
             </div>
 
-            <div class="col-12 col-lg-6">
+            <div class="col-12"><hr class="my-1"></div>
+            <div class="fw-semibold">送貨安排</div>
+
+            <div class="col-12 col-lg-4">
               <label class="form-label">送貨地址 *</label>
-              <input type="text" class="form-control" name="delivery_address" placeholder="大廈 + 單位 + 聯絡備註（如管理處）">
+              <textarea class="form-control" name="delivery_address" rows="2" placeholder="可同客戶地址">{{ request.args.get('delivery_address','') }}</textarea>
             </div>
-            <div class="col-12 col-lg-3">
+            <div class="col-12 col-lg-2">
+              <label class="form-label">送貨日期 *</label>
+              <input type="date" class="form-control" name="delivery_date" value="{{ request.args.get('delivery_date','') }}">
+            </div>
+            <div class="col-12 col-lg-2">
+              <label class="form-label">舊有寬頻合約期 *</label>
+              <input type="date" class="form-control" name="old_broadband_contract_period" value="{{ request.args.get('old_broadband_contract_period','') }}">
+            </div>
+            <div class="col-12 col-lg-2">
               <label class="form-label">送貨時段（工程）</label>
               <select class="form-select" name="preferred_time_slot">
                 <option value="">不限</option>
@@ -60,7 +76,7 @@
                 {% endfor %}
               </select>
             </div>
-            <div class="col-12 col-lg-3">
+            <div class="col-12 col-lg-2">
               <label class="form-label">Router 型號 *</label>
               <select class="form-select" name="router_model">
                 <option value="">請選擇型號</option>
@@ -80,16 +96,6 @@
               </select>
             </div>
             <div class="col-12 col-lg-3">
-              <div class="form-check mt-4">
-                <input class="form-check-input" type="checkbox" value="1" id="requires-installation" name="requires_installation" {% if request.args.get('requires_installation','') == '1' %}checked{% endif %}>
-                <label class="form-check-label" for="requires-installation">需要上門安裝</label>
-              </div>
-              <div class="form-check mt-1">
-                <input class="form-check-input" type="checkbox" value="1" id="express-delivery" name="express_delivery" {% if request.args.get('express_delivery','') == '1' %}checked{% endif %}>
-                <label class="form-check-label" for="express-delivery">速遞</label>
-              </div>
-            </div>
-            <div class="col-12 col-lg-3">
               <label class="form-label">工程師級數</label>
               <select class="form-select" name="engineer_level">
                 <option value="">全部級數</option>
@@ -99,9 +105,20 @@
               </select>
             </div>
             <div class="col-12 col-lg-3">
+              <label class="form-label">排序方式</label>
+              <select class="form-select" name="sort_by">
+                <option value="created_at_desc" {% if request.args.get('sort_by','created_at_desc') == 'created_at_desc' %}selected{% endif %}>最新建立</option>
+                <option value="delivery_date_asc" {% if request.args.get('sort_by','') == 'delivery_date_asc' %}selected{% endif %}>送貨日期（近至遠）</option>
+                <option value="delivery_date_desc" {% if request.args.get('sort_by','') == 'delivery_date_desc' %}selected{% endif %}>送貨日期（遠至近）</option>
+                <option value="contract_period_asc" {% if request.args.get('sort_by','') == 'contract_period_asc' %}selected{% endif %}>舊約期（近至遠）</option>
+                <option value="contract_period_desc" {% if request.args.get('sort_by','') == 'contract_period_desc' %}selected{% endif %}>舊約期（遠至近）</option>
+              </select>
+            </div>
+            <div class="col-12 col-lg-3">
               <label class="form-label">聯絡人</label>
               <input type="text" class="form-control" name="contact_person" placeholder="例如：陳生">
             </div>
+
             <div class="col-12 col-lg-3">
               <label class="form-label">單號碼</label>
               <input type="text" class="form-control" name="order_reference" placeholder="例如：R20260319-001">
@@ -112,13 +129,22 @@
             </div>
             <div class="col-12 col-lg-3">
               <div class="form-check mt-4">
+                <input class="form-check-input" type="checkbox" value="1" id="requires-installation" name="requires_installation" {% if request.args.get('requires_installation','') == '1' %}checked{% endif %}>
+                <label class="form-check-label" for="requires-installation">需要上門安裝</label>
+              </div>
+              <div class="form-check mt-1">
+                <input class="form-check-input" type="checkbox" value="1" id="express-delivery" name="express_delivery" {% if request.args.get('express_delivery','') == '1' %}checked{% endif %}>
+                <label class="form-check-label" for="express-delivery">速遞</label>
+              </div>
+              <div class="form-check mt-1">
                 <input class="form-check-input" type="checkbox" value="1" id="engineering-blocked" name="engineering_blocked" {% if request.args.get('engineering_blocked','') == '1' %}checked{% endif %}>
                 <label class="form-check-label" for="engineering-blocked">工程有阻塞</label>
               </div>
             </div>
+
             <div class="col-12">
               <label class="form-label">備註（最多 150 字）</label>
-              <textarea class="form-control" name="remark" rows="2" maxlength="150" placeholder="可記錄：電梯限制、收貨窗口、客戶偏好、技術跟進點">{{ request.args.get('remark','') }}</textarea>
+              <textarea class="form-control" name="remark" rows="2" maxlength="150">{{ request.args.get('remark','') }}</textarea>
               <div class="form-check mt-2">
                 <input class="form-check-input" type="checkbox" value="1" id="reminder-30-days" name="reminder_30_days" checked>
                 <label class="form-check-label text-muted" for="reminder-30-days">智能提示：30 日內提醒</label>
@@ -145,62 +171,46 @@
       <table class="table table-striped table-hover align-middle">
         <thead>
           <tr>
-            <th>登記號碼</th>
             <th>客戶</th>
+            <th>登記號碼</th>
+            <th>寬頻號碼</th>
+            <th>服務號碼</th>
+            <th>Sssa</th>
             <th>聯絡電話</th>
             <th>送貨日期</th>
-            <th>舊有寬頻合約期</th>
+            <th>舊約期</th>
             <th>地址</th>
-            <th>時段</th>
             <th>型號</th>
-            <th>聯絡人</th>
-            <th>單號碼</th>
-            <th>送貨方式</th>
-            <th>安裝</th>
-            <th>速遞</th>
+            <th>時段</th>
             <th>工程級數</th>
-            <th>阻塞</th>
-            <th>相片</th>
-            <th>備註</th>
             <th>操作</th>
           </tr>
         </thead>
         <tbody>
           {% for item in deliveries %}
           <tr>
-            <td>{{ item['phone_number'] }}</td>
             <td>{{ item['customer_name'] }}</td>
+            <td>{{ item['phone_number'] }}</td>
+            <td>{{ item['broadband_number'] or '-' }}</td>
+            <td>{{ item['registration_service_number'] or '-' }}</td>
+            <td>{{ item['sssa_number'] or '-' }}</td>
             <td>{{ item['contact_phone'] or item['phone_number'] }}</td>
             <td>{{ item['delivery_date'] or '-' }}</td>
             <td>{{ item['old_broadband_contract_period'] or '-' }}</td>
             <td class="cell-note">{{ item['delivery_address'] }}</td>
-            <td>{{ item['preferred_time_slot'] or '-' }}</td>
             <td>{{ item['router_model'] }}</td>
-            <td>{{ item['contact_person'] or '-' }}</td>
-            <td>{{ item['order_reference'] or ('#' ~ item['id']) }}</td>
-            <td>{{ item['delivery_method'] or '-' }}</td>
-            <td>{{ '需要' if item['requires_installation'] else '不需要' }}</td>
-            <td>{{ '是' if item['express_delivery'] else '否' }}</td>
+            <td>{{ item['preferred_time_slot'] or '-' }}</td>
             <td>{{ item['engineer_level'] or '初級' }}</td>
-            <td>{% if item['engineering_blocked'] %}<span class="text-danger fw-semibold">有阻塞</span>{% else %}<span class="text-success">正常</span>{% endif %}</td>
-            <td>
-              {% if item['photo_path'] %}
-              <a href="{{ url_for('static', filename=item['photo_path']) }}" target="_blank" rel="noopener">查看</a>
-              {% else %}
-              -
-              {% endif %}
-            </td>
-            <td class="cell-note">{{ item['remark'] or '-' }}</td>
             <td class="cell-actions">
-              {% set whatsapp_message = '送貨通知\n單號：' ~ (item['order_reference'] or ('#' ~ item['id'])) ~ '\n客戶：' ~ item['customer_name'] ~ '\n聯絡人：' ~ (item['contact_person'] or item['customer_name']) ~ '\n聯絡電話：' ~ (item['contact_phone'] or item['phone_number']) ~ '\n送貨日期：' ~ (item['delivery_date'] or '-') ~ '\n送貨時段：' ~ (item['preferred_time_slot'] or '-') ~ '\n送貨地點：' ~ item['delivery_address'] ~ '\n工程級數：' ~ (item['engineer_level'] or '初級') ~ '\n工程狀態：' ~ ('有阻塞' if item['engineering_blocked'] else '正常') %}
-              <div class="d-flex gap-2">
+              {% set whatsapp_message = '*速遞 Router (' ~ item['router_model'] ~ ')*\n\n*安排送貨日期:* ' ~ (item['delivery_date'] or '-') ~ ' (' ~ (item['preferred_time_slot'] or '-') ~ ')\n\n' ~ item['customer_name'] ~ '\n*聯絡電話:* ' ~ (item['contact_phone'] or item['phone_number']) ~ '\n*寬頻號碼:* ' ~ (item['broadband_number'] or '-') ~ '\n*Ssa no:* ' ~ (item['sssa_number'] or '-') ~ '\n*送貨地址:*\n' ~ item['delivery_address'] %}
+              <div class="d-flex gap-2 flex-wrap">
                 <a class="btn btn-sm btn-outline-primary" href="{{ url_for('edit_router_delivery', delivery_id=item['id']) }}">編輯</a>
-                <a
-                  class="btn btn-sm btn-success"
-                  target="_blank"
-                  rel="noopener"
-                  href="https://wa.me/?text={{ whatsapp_message|urlencode }}"
-                >WhatsApp</a>
+                <a class="btn btn-sm btn-success" target="_blank" rel="noopener" href="https://wa.me/?text={{ whatsapp_message|urlencode }}">WhatsApp</a>
+                <button
+                  type="button"
+                  class="btn btn-sm btn-outline-success boss-wa-btn"
+                  data-message="{{ whatsapp_message|e }}"
+                >通知上司</button>
                 <form method="post" action="{{ url_for('delete_router_delivery', delivery_id=item['id'], **request.args.to_dict(flat=False)) }}" onsubmit="return confirm('確定要刪除此筆送貨記錄嗎？');">
                   <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
                   <button type="submit" class="btn btn-sm btn-outline-danger">刪除</button>
@@ -209,11 +219,92 @@
             </td>
           </tr>
           {% else %}
-          <tr><td colspan="18" class="text-center text-muted py-4">沒有符合條件的送貨記錄。</td></tr>
+          <tr><td colspan="13" class="text-center text-muted py-4">沒有符合條件的送貨記錄。</td></tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
   </div>
 </div>
+
+<script>
+(() => {
+  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+  const ocrButton = document.getElementById('ocr-fill-btn');
+  const ocrInput = document.getElementById('ocr-contract-photo');
+  const ocrStatus = document.getElementById('ocr-status');
+  const form = document.getElementById('router-delivery-form');
+
+  const setStatus = (message, isError = false) => {
+    ocrStatus.textContent = message;
+    ocrStatus.classList.toggle('text-danger', isError);
+    ocrStatus.classList.toggle('text-success', !isError);
+  };
+
+  ocrButton?.addEventListener('click', async () => {
+    const file = ocrInput?.files?.[0];
+    if (!file) {
+      setStatus('請先選擇合約圖片。', true);
+      return;
+    }
+
+    const payload = new FormData();
+    payload.append('photo', file);
+    setStatus('OCR 辨識中...');
+    ocrButton.disabled = true;
+
+    try {
+      const response = await fetch('{{ url_for("router_delivery_ocr") }}', {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': csrfToken },
+        body: payload,
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || 'OCR 失敗');
+      }
+
+      const fields = result.fields || {};
+      const mapping = {
+        customer_name: 'customer_name',
+        phone_number: 'phone_number',
+        contact_phone: 'contact_phone',
+        broadband_number: 'broadband_number',
+        customer_address: 'customer_address',
+        delivery_address: 'delivery_address',
+        registration_service_number: 'registration_service_number',
+        sssa_number: 'sssa_number',
+      };
+
+      Object.entries(mapping).forEach(([fieldName, key]) => {
+        const el = form.querySelector(`[name="${fieldName}"]`);
+        if (el && fields[key]) {
+          if (!el.value || fieldName === 'delivery_address') {
+            el.value = fields[key];
+          }
+        }
+      });
+      setStatus('OCR 完成，已嘗試自動填表。');
+    } catch (error) {
+      setStatus(error.message || 'OCR 失敗，請手動輸入。', true);
+    } finally {
+      ocrButton.disabled = false;
+    }
+  });
+
+  document.querySelectorAll('.boss-wa-btn').forEach((button) => {
+    button.addEventListener('click', () => {
+      const savedPhone = localStorage.getItem('boss_whatsapp_phone') || '';
+      const phone = window.prompt('請輸入上司 WhatsApp 號碼（只輸入數字，例：85291234567）', savedPhone);
+      if (!phone) return;
+      const cleanedPhone = phone.replace(/\D/g, '');
+      if (!cleanedPhone) return;
+      localStorage.setItem('boss_whatsapp_phone', cleanedPhone);
+      const message = button.dataset.message || '';
+      const encoded = encodeURIComponent(message);
+      window.open(`https://wa.me/${cleanedPhone}/?text=${encoded}`, '_blank');
+    });
+  });
+})();
+</script>
 {% endblock %}

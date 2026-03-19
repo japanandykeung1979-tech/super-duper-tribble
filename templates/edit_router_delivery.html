@@ -24,14 +24,30 @@
         <input class="form-control" type="tel" name="contact_phone" value="{{ delivery['contact_phone'] or '' }}">
       </div>
       <div class="col-12 col-lg-3">
+        <label class="form-label">寬頻號碼</label>
+        <input class="form-control" type="text" name="broadband_number" value="{{ delivery['broadband_number'] or '' }}">
+      </div>
+      <div class="col-12 col-lg-3">
         <label class="form-label">送貨日期 *</label>
         <input class="form-control" type="date" name="delivery_date" value="{{ delivery['delivery_date'] }}" required>
+      </div>
+      <div class="col-12 col-lg-3">
+        <label class="form-label">登記服務號碼</label>
+        <input class="form-control" type="text" name="registration_service_number" value="{{ delivery['registration_service_number'] or '' }}">
+      </div>
+      <div class="col-12 col-lg-3">
+        <label class="form-label">Sssa Number</label>
+        <input class="form-control" type="text" name="sssa_number" value="{{ delivery['sssa_number'] or '' }}">
       </div>
       <div class="col-12 col-lg-3">
         <label class="form-label">舊有寬頻合約期 *</label>
         <input class="form-control" type="date" name="old_broadband_contract_period" value="{{ delivery['old_broadband_contract_period'] }}" required>
       </div>
 
+      <div class="col-12">
+        <label class="form-label">客戶地址（合約地址）</label>
+        <textarea class="form-control" name="customer_address" rows="2">{{ delivery['customer_address'] or '' }}</textarea>
+      </div>
       <div class="col-12">
         <label class="form-label">送貨地址 *</label>
         <input class="form-control" type="text" name="delivery_address" value="{{ delivery['delivery_address'] }}" required>

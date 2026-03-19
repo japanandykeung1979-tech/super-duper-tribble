@@ -36,6 +36,13 @@ ROUTER_MODEL_OPTIONS = ["Wi-Fi 7", "Wi-Fi 6"]
 DELIVERY_TIME_SLOT_OPTIONS = ["二至四", "四至六"]
 DELIVERY_STATUS_OPTIONS = ["自行送貨", "速遞"]
 ENGINEER_LEVEL_OPTIONS = ["初級", "中級", "高級"]
+ROUTER_SORT_OPTIONS = {
+    "created_at_desc": "created_at DESC",
+    "delivery_date_asc": "CASE WHEN delivery_date IS NULL OR delivery_date = '' THEN 1 ELSE 0 END, delivery_date ASC, created_at DESC",
+    "delivery_date_desc": "CASE WHEN delivery_date IS NULL OR delivery_date = '' THEN 1 ELSE 0 END, delivery_date DESC, created_at DESC",
+    "contract_period_asc": "CASE WHEN old_broadband_contract_period IS NULL OR old_broadband_contract_period = '' THEN 1 ELSE 0 END, old_broadband_contract_period ASC, created_at DESC",
+    "contract_period_desc": "CASE WHEN old_broadband_contract_period IS NULL OR old_broadband_contract_period = '' THEN 1 ELSE 0 END, old_broadband_contract_period DESC, created_at DESC",
+}
 DATE_FIELDS = ["contract_end_date", "transfer_out_date", "start_date", "replacement_date"]
 MNP_REQUIRED_FIELDS = [
     "english_name",
@@ -130,6 +137,10 @@ def init_db() -> None:
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             phone_number TEXT NOT NULL,
             customer_name TEXT NOT NULL,
+            customer_address TEXT,
+            registration_service_number TEXT,
+            sssa_number TEXT,
+            broadband_number TEXT,
             contact_person TEXT,
             contact_phone TEXT,
             delivery_address TEXT NOT NULL,
@@ -187,6 +198,10 @@ def init_db() -> None:
     required_router_columns = {
         "contact_person": "TEXT",
         "contact_phone": "TEXT",
+        "customer_address": "TEXT",
+        "registration_service_number": "TEXT",
+        "sssa_number": "TEXT",
+        "broadband_number": "TEXT",
         "delivery_date": "TEXT",
         "old_broadband_contract_period": "TEXT",
         "preferred_time_slot": "TEXT",
@@ -452,11 +467,13 @@ def build_router_delivery_filters(args) -> tuple[str, list[Any]]:
     express_delivery = args.get("express_delivery", "").strip()
     old_broadband_contract_period = args.get("old_broadband_contract_period", "").strip()
     contact_phone = args.get("contact_phone", "").strip()
+    registration_service_number = args.get("registration_service_number", "").strip()
+    sssa_number = args.get("sssa_number", "").strip()
+    broadband_number = args.get("broadband_number", "").strip()
     engineer_level = args.get("engineer_level", "").strip()
     engineering_blocked = args.get("engineering_blocked", "").strip()
     remark = args.get("remark", "").strip()
-    sort_delivery_date = args.get("sort_delivery_date", "").strip()
-    sort_contract_period = args.get("sort_contract_period", "").strip()
+    sort_by = args.get("sort_by", "").strip() or "created_at_desc"
 
     if phone_number:
         query += " AND phone_number LIKE ?"
@@ -467,6 +484,15 @@ def build_router_delivery_filters(args) -> tuple[str, list[Any]]:
     if contact_phone:
         query += " AND contact_phone LIKE ?"
         params.append(f"%{contact_phone}%")
+    if registration_service_number:
+        query += " AND registration_service_number LIKE ?"
+        params.append(f"%{registration_service_number}%")
+    if sssa_number:
+        query += " AND sssa_number LIKE ?"
+        params.append(f"%{sssa_number}%")
+    if broadband_number:
+        query += " AND broadband_number LIKE ?"
+        params.append(f"%{broadband_number}%")
     if delivery_date:
         query += " AND delivery_date = ?"
         params.append(delivery_date)
@@ -495,15 +521,7 @@ def build_router_delivery_filters(args) -> tuple[str, list[Any]]:
         query += " AND remark LIKE ?"
         params.append(f"%{remark}%")
 
-    if sort_delivery_date == "1":
-        query += " ORDER BY CASE WHEN delivery_date IS NULL OR delivery_date = '' THEN 1 ELSE 0 END, delivery_date ASC, created_at DESC"
-    elif sort_contract_period == "1":
-        query += (
-            " ORDER BY CASE WHEN old_broadband_contract_period IS NULL OR old_broadband_contract_period = '' THEN 1 ELSE 0 END, "
-            "old_broadband_contract_period ASC, created_at DESC"
-        )
-    else:
-        query += " ORDER BY created_at DESC"
+    query += f" ORDER BY {ROUTER_SORT_OPTIONS.get(sort_by, ROUTER_SORT_OPTIONS['created_at_desc'])}"
     return query, params
 
 
@@ -512,15 +530,20 @@ def insert_router_delivery(data: dict[str, Any]) -> None:
     db.execute(
         """
         INSERT INTO router_deliveries (
-            phone_number, customer_name, contact_person, contact_phone, delivery_address, delivery_date,
+            phone_number, customer_name, customer_address, registration_service_number, sssa_number, broadband_number,
+            contact_person, contact_phone, delivery_address, delivery_date,
             old_broadband_contract_period, preferred_time_slot, router_model,
             requires_installation, express_delivery, delivery_method, order_reference, status,
             engineer_level, engineering_blocked, photo_path, remark, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             data["phone_number"],
             data["customer_name"],
+            data.get("customer_address", ""),
+            data.get("registration_service_number", ""),
+            data.get("sssa_number", ""),
+            data.get("broadband_number", ""),
             data.get("contact_person", ""),
             data.get("contact_phone", ""),
             data["delivery_address"],
@@ -711,6 +734,64 @@ def parse_hkid_ocr_fields(ocr_text: str) -> dict[str, str]:
         "hkid": hkid,
         "english_name": english_name,
         "chinese_name": chinese_name,
+    }
+
+
+def parse_router_contract_ocr_fields(ocr_text: str) -> dict[str, str]:
+    compact_text = re.sub(r"[ \t]+", " ", ocr_text)
+    lines = [line.strip() for line in compact_text.splitlines() if line.strip()]
+
+    customer_name = ""
+    for line in lines:
+        if re.search(r"(登記名稱|Name)", line, flags=re.IGNORECASE):
+            parts = re.split(r"[:：]", line, maxsplit=1)
+            if len(parts) == 2 and parts[1].strip():
+                customer_name = parts[1].strip().upper()
+                break
+    if not customer_name:
+        for line in lines:
+            upper_line = line.upper()
+            if re.fullmatch(r"[A-Z][A-Z\s\-',.]{4,}", upper_line) and "CONTRACT" not in upper_line:
+                customer_name = re.sub(r"\s+", " ", upper_line).strip()
+                break
+
+    phone_candidates = re.findall(r"(?<!\d)(?:\+?852[-\s]?)?(\d{8})(?!\d)", compact_text)
+    customer_phone = phone_candidates[0] if phone_candidates else ""
+
+    registration_number = ""
+    registration_patterns = [
+        r"(?:銷售及服務合約編號|合約編號|服務編號|Registration\s*No\.?|Service\s*No\.?)\s*[:：]?\s*([A-Z0-9\-]{6,})",
+        r"(?:No\.?|編號)\s*[:：]?\s*([A-Z0-9]{8,})",
+    ]
+    for pattern in registration_patterns:
+        match = re.search(pattern, compact_text, flags=re.IGNORECASE)
+        if match:
+            registration_number = match.group(1).strip()
+            break
+
+    address_match = re.search(
+        r"(?:住宅地址|註冊地址|服務地址|Address)\s*[:：]?\s*(.+?)(?:\n\s*\n|$)",
+        ocr_text,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    customer_address = ""
+    if address_match:
+        customer_address = re.sub(r"\n{2,}", "\n", address_match.group(1)).strip()
+    elif len(lines) >= 3:
+        for index, line in enumerate(lines):
+            if re.search(r"(ADDRESS|地址)", line, flags=re.IGNORECASE):
+                customer_address = "\n".join(lines[index + 1 : index + 4]).strip()
+                break
+
+    return {
+        "customer_name": customer_name,
+        "phone_number": customer_phone,
+        "contact_phone": customer_phone,
+        "broadband_number": customer_phone,
+        "customer_address": customer_address,
+        "delivery_address": customer_address,
+        "registration_service_number": registration_number,
+        "sssa_number": registration_number,
     }
 
 
@@ -930,6 +1011,30 @@ def dashboard_ocr_add():
             "message": "OCR 完成，已自動新增紀錄。",
         }
     )
+
+
+@app.post("/api/router-delivery/ocr")
+@login_required
+def router_delivery_ocr():
+    uploaded_photo = request.files.get("photo")
+    if not uploaded_photo or not uploaded_photo.filename:
+        return jsonify({"error": "請先上傳合約圖片。"}), 400
+
+    filename = secure_filename(uploaded_photo.filename)
+    extension = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if extension not in ALLOWED_IMAGE_EXTENSIONS:
+        return jsonify({"error": "檔案格式不支援，請上傳圖片。"}), 400
+
+    try:
+        image_bytes = uploaded_photo.read()
+        ocr_text = run_ocr_on_image_bytes(image_bytes)
+    except RuntimeError as error:
+        if "未安裝" in str(error) or "找不到 Tesseract" in str(error):
+            return jsonify({"error": str(error)}), 503
+        return jsonify({"error": "OCR 辨識失敗，請嘗試更清晰的圖片。"}), 500
+
+    parsed = parse_router_contract_ocr_fields(ocr_text)
+    return jsonify({"fields": parsed, "raw_text": ocr_text})
 
 
 @app.route("/dashboard", methods=["GET", "POST"])
@@ -1173,6 +1278,9 @@ def router_delivery():
                 "phone_number": request.form.get("phone_number", "").strip(),
                 "customer_name": request.form.get("customer_name", "").strip(),
                 "contact_phone": request.form.get("contact_phone", "").strip(),
+                "registration_service_number": request.form.get("registration_service_number", "").strip(),
+                "sssa_number": request.form.get("sssa_number", "").strip(),
+                "broadband_number": request.form.get("broadband_number", "").strip(),
                 "delivery_date": request.form.get("delivery_date", "").strip(),
                 "delivery_method": request.form.get("delivery_method", "").strip(),
                 "router_model": request.form.get("router_model", "").strip(),
@@ -1182,8 +1290,7 @@ def router_delivery():
                 "engineer_level": request.form.get("engineer_level", "").strip(),
                 "engineering_blocked": "1" if request.form.get("engineering_blocked") else "",
                 "remark": request.form.get("remark", "").strip(),
-                "sort_delivery_date": "1" if request.form.get("sort_delivery_date") else "",
-                "sort_contract_period": "1" if request.form.get("sort_contract_period") else "",
+                "sort_by": request.form.get("sort_by", "").strip(),
             }
             cleaned_params = {key: value for key, value in search_params.items() if value}
             return redirect(url_for("router_delivery", **cleaned_params))
@@ -1194,6 +1301,10 @@ def router_delivery():
                 "customer_name": request.form.get("customer_name", "").strip(),
                 "contact_person": request.form.get("contact_person", "").strip(),
                 "contact_phone": request.form.get("contact_phone", "").strip(),
+                "customer_address": request.form.get("customer_address", "").strip(),
+                "registration_service_number": request.form.get("registration_service_number", "").strip(),
+                "sssa_number": request.form.get("sssa_number", "").strip(),
+                "broadband_number": request.form.get("broadband_number", "").strip(),
                 "delivery_address": request.form.get("delivery_address", "").strip(),
                 "delivery_date": request.form.get("delivery_date", "").strip(),
                 "old_broadband_contract_period": request.form.get("old_broadband_contract_period", "").strip(),
@@ -1271,6 +1382,10 @@ def edit_router_delivery(delivery_id: int):
             "customer_name": request.form.get("customer_name", "").strip(),
             "contact_person": request.form.get("contact_person", "").strip(),
             "contact_phone": request.form.get("contact_phone", "").strip(),
+            "customer_address": request.form.get("customer_address", "").strip(),
+            "registration_service_number": request.form.get("registration_service_number", "").strip(),
+            "sssa_number": request.form.get("sssa_number", "").strip(),
+            "broadband_number": request.form.get("broadband_number", "").strip(),
             "delivery_address": request.form.get("delivery_address", "").strip(),
             "delivery_date": request.form.get("delivery_date", "").strip(),
             "old_broadband_contract_period": request.form.get("old_broadband_contract_period", "").strip(),
@@ -1339,7 +1454,8 @@ def edit_router_delivery(delivery_id: int):
         db.execute(
             """
             UPDATE router_deliveries
-            SET phone_number = ?, customer_name = ?, delivery_address = ?, delivery_date = ?,
+            SET phone_number = ?, customer_name = ?, customer_address = ?, registration_service_number = ?,
+                sssa_number = ?, broadband_number = ?, delivery_address = ?, delivery_date = ?,
                 old_broadband_contract_period = ?, preferred_time_slot = ?, router_model = ?,
                 requires_installation = ?, express_delivery = ?, contact_person = ?, contact_phone = ?,
                 delivery_method = ?, order_reference = ?, status = ?, engineer_level = ?,
@@ -1349,6 +1465,10 @@ def edit_router_delivery(delivery_id: int):
             (
                 form_data["phone_number"],
                 form_data["customer_name"],
+                form_data["customer_address"],
+                form_data["registration_service_number"],
+                form_data["sssa_number"],
+                form_data["broadband_number"],
                 form_data["delivery_address"],
                 form_data["delivery_date"],
                 form_data["old_broadband_contract_period"],
