@@ -14,6 +14,7 @@ from uuid import uuid4
 from xml.sax.saxutils import escape
 
 from flask import Flask, Response, abort, flash, g, jsonify, redirect, render_template, request, session, url_for
+from werkzeug.exceptions import HTTPException
 from werkzeug.utils import secure_filename
 
 try:
@@ -79,9 +80,26 @@ EDIT_REQUIRED_FIELDS = [
 VALID_REAL_NAME_VALUES = {"是", "否"}
 UPLOAD_FOLDER = BASE_DIR / "static" / "uploads"
 ALLOWED_IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp", "bmp", "heic", "heif"}
+MAX_UPLOAD_SIZE_BYTES = 8 * 1024 * 1024
 
 DEMO_USER = os.environ.get("CRM_USERNAME", "admin")
 DEMO_PASSWORD = os.environ.get("CRM_PASSWORD", "password123")
+
+
+def read_uploaded_file_bytes(uploaded_file, *, max_size: int = MAX_UPLOAD_SIZE_BYTES) -> tuple[bytes | None, str]:
+    if not uploaded_file:
+        return None, "請先上傳圖片檔案。"
+
+    try:
+        image_bytes = uploaded_file.read()
+    except OSError:
+        return None, "讀取上傳檔案失敗，請稍後重試。"
+
+    if not image_bytes:
+        return None, "上傳檔案為空，請重新選擇圖片。"
+    if len(image_bytes) > max_size:
+        return None, f"圖片大小不可超過 {max_size // (1024 * 1024)}MB。"
+    return image_bytes, ""
 
 
 def get_db() -> sqlite3.Connection:
@@ -652,7 +670,10 @@ def save_uploaded_photo(uploaded_file) -> str:
     UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
     unique_name = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid4().hex}.{extension}"
     destination = UPLOAD_FOLDER / unique_name
-    uploaded_file.save(destination)
+    try:
+        uploaded_file.save(destination)
+    except OSError:
+        return ""
     return str(Path("uploads") / unique_name)
 
 
@@ -679,7 +700,10 @@ def save_photo_bytes(image_bytes: bytes, extension: str) -> str:
     UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
     unique_name = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid4().hex}.{extension}"
     destination = UPLOAD_FOLDER / unique_name
-    destination.write_bytes(image_bytes)
+    try:
+        destination.write_bytes(image_bytes)
+    except OSError:
+        return ""
     return str(Path("uploads") / unique_name)
 
 
@@ -955,8 +979,12 @@ def ocr_scan():
     if extension not in ALLOWED_IMAGE_EXTENSIONS:
         return jsonify({"error": "檔案格式不支援，請上傳圖片。"}), 400
 
+    image_bytes, read_error = read_uploaded_file_bytes(uploaded_photo)
+    if read_error:
+        return jsonify({"error": read_error}), 400
+
+    assert image_bytes is not None
     try:
-        image_bytes = uploaded_photo.read()
         ocr_text = run_ocr_on_image_bytes(image_bytes)
     except RuntimeError as error:
         payload, status_code = map_ocr_runtime_error(error)
@@ -990,7 +1018,11 @@ def dashboard_ocr_add():
     if extension not in ALLOWED_IMAGE_EXTENSIONS:
         return jsonify({"error": "檔案格式不支援，請上傳圖片。"}), 400
 
-    image_bytes = uploaded_photo.read()
+    image_bytes, read_error = read_uploaded_file_bytes(uploaded_photo)
+    if read_error:
+        return jsonify({"error": read_error}), 400
+
+    assert image_bytes is not None
     photo_path = save_photo_bytes(image_bytes, extension)
     if not photo_path:
         return jsonify({"error": "相片儲存失敗。"}), 500
@@ -1031,8 +1063,12 @@ def router_delivery_ocr():
     if extension not in ALLOWED_IMAGE_EXTENSIONS:
         return jsonify({"error": "檔案格式不支援，請上傳圖片。"}), 400
 
+    image_bytes, read_error = read_uploaded_file_bytes(uploaded_photo)
+    if read_error:
+        return jsonify({"error": read_error}), 400
+
+    assert image_bytes is not None
     try:
-        image_bytes = uploaded_photo.read()
         ocr_text = run_ocr_on_image_bytes(image_bytes)
     except RuntimeError as error:
         payload, status_code = map_ocr_runtime_error(error)
@@ -1810,6 +1846,28 @@ def delete_appointment(appointment_id: int):
     else:
         flash("找不到要刪除的紀錄。", "danger")
     return redirect(url_for("appointments", **request.args.to_dict(flat=False)))
+
+
+@app.errorhandler(sqlite3.Error)
+def handle_database_error(error: sqlite3.Error):
+    app.logger.exception("Database operation failed: %s", error)
+    if request.path.startswith("/api/"):
+        return jsonify({"error": "資料庫暫時無法使用，請稍後重試。"}), 503
+    flash("資料庫暫時無法使用，請稍後重試。", "danger")
+    referrer = request.referrer or url_for("index")
+    return redirect(referrer)
+
+
+@app.errorhandler(Exception)
+def handle_unexpected_error(error: Exception):
+    if isinstance(error, HTTPException):
+        return error
+    app.logger.exception("Unhandled error: %s", error)
+    if request.path.startswith("/api/"):
+        return jsonify({"error": "系統發生未預期錯誤，請稍後重試。"}), 500
+    flash("系統發生未預期錯誤，請稍後重試。", "danger")
+    referrer = request.referrer or url_for("index")
+    return redirect(referrer)
 
 
 init_db()
