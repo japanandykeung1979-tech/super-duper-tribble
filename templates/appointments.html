@@ -10,6 +10,8 @@
 
     <form method="post" enctype="multipart/form-data" class="row g-3 align-items-end">
       <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="sort_by" value="{{ request.args.get('sort_by', '') }}">
+      <input type="hidden" name="sort_order" value="{{ request.args.get('sort_order', '') }}">
       <div class="col-12">
         <div class="border rounded p-3 bg-light-subtle">
           <div class="fw-semibold mb-2">快速欄位（搜尋 + 新增）</div>
@@ -88,9 +90,30 @@
         <thead>
           <tr>
             <th>電話號碼</th>
-            <th>電訊商</th>
             <th>公司名稱</th>
-            <th>合約完結日</th>
+            <th>
+              {% set is_contract_sort = request.args.get('sort_by') == 'contract_end_date' %}
+              {% set current_order = request.args.get('sort_order', '') %}
+              {% set next_order = 'desc' if is_contract_sort and current_order == 'asc' else 'asc' %}
+              {% set arrow = '▲' if is_contract_sort and current_order == 'asc' else ('▼' if is_contract_sort and current_order == 'desc' else '↕') %}
+              <a
+                href="{{ url_for('appointments',
+                  phone_number=request.args.get('phone_number',''),
+                  telecom_category=request.args.get('telecom_category',''),
+                  current_telecom=request.args.get('current_telecom',''),
+                  contract_end_date=request.args.get('contract_end_date',''),
+                  current_plan_usage=request.args.get('current_plan_usage',''),
+                  remark=request.args.get('remark',''),
+                  sort_by='contract_end_date',
+                  sort_order=next_order
+                ) }}"
+                class="link-dark text-decoration-none d-inline-flex align-items-center gap-1"
+                aria-label="按合約完結日排序，目前排序：{{ '由近至遠' if is_contract_sort and current_order == 'asc' else ('由遠至近' if is_contract_sort and current_order == 'desc' else '未排序') }}"
+              >
+                合約完結日
+                <span aria-hidden="true">{{ arrow }}</span>
+              </a>
+            </th>
             <th>月費及用量</th>
             <th>相片</th>
             <th>備註</th>
@@ -101,8 +124,7 @@
           {% for item in appointments %}
           <tr>
             <td>{{ item['phone_number'] }}</td>
-            <td>{{ item['telecom_category'] or '-' }}</td>
-            <td>{{ item['current_telecom'] }}</td>
+            <td>{{ item['current_telecom'] or '-' }}</td>
             <td>{{ item['contract_end_date'] or '-' }}</td>
             <td>{{ item['current_plan_usage'] or '-' }}</td>
             <td>
@@ -124,7 +146,7 @@
             </td>
           </tr>
           {% else %}
-          <tr><td colspan="8" class="text-center text-muted py-4">沒有符合條件的記錄。</td></tr>
+          <tr><td colspan="7" class="text-center text-muted py-4">沒有符合條件的記錄。</td></tr>
           {% endfor %}
         </tbody>
       </table>
