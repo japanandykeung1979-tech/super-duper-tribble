@@ -157,6 +157,7 @@
       <div class="col-12 d-grid d-md-flex gap-2 quick-actions">
         <button class="btn btn-success" type="submit" name="action" value="add">新增送貨記錄</button>
         <button class="btn btn-primary" type="submit" name="action" value="search">搜尋</button>
+        <button class="btn btn-outline-success" type="button" id="boss-wa-generate-btn">一鍵打開 WhatsApp（通知上司）</button>
         <a class="btn btn-outline-success" href="{{ url_for('export_router_delivery_whatsapp', **request.args.to_dict(flat=False)) }}" target="_blank" rel="noopener">匯出到 WhatsApp</a>
         <a class="btn btn-outline-secondary" href="{{ url_for('router_delivery') }}">條件歸零</a>
       </div>
@@ -229,16 +230,119 @@
 
 <script>
 (() => {
+  const SUPERVISOR_PHONE = '85212345678';
+  const DRAFT_STORAGE_KEY = 'router_delivery_draft_v1';
   const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
   const ocrButton = document.getElementById('ocr-fill-btn');
   const ocrInput = document.getElementById('ocr-contract-photo');
   const ocrStatus = document.getElementById('ocr-status');
   const form = document.getElementById('router-delivery-form');
+  const bossWaGenerateButton = document.getElementById('boss-wa-generate-btn');
+
+  const draftFieldNames = [
+    'customer_name',
+    'contact_phone',
+    'broadband_number',
+    'sssa_number',
+    'delivery_address',
+    'router_model',
+    'delivery_date',
+    'preferred_time_slot',
+  ];
 
   const setStatus = (message, isError = false) => {
     ocrStatus.textContent = message;
     ocrStatus.classList.toggle('text-danger', isError);
     ocrStatus.classList.toggle('text-success', !isError);
+  };
+
+  const formatDateForMessage = (rawDate) => {
+    if (!rawDate) return '';
+    const match = rawDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) return rawDate;
+    const [, year, month, day] = match;
+    return `${Number(day)}/${Number(month)}/${year}`;
+  };
+
+  const getFieldValue = (fieldName) => form.querySelector(`[name="${fieldName}"]`)?.value?.trim() || '';
+
+  const buildMessage = () => {
+    const routerModel = getFieldValue('router_model');
+    const deliveryDate = formatDateForMessage(getFieldValue('delivery_date'));
+    const preferredTimeSlot = getFieldValue('preferred_time_slot');
+    const customerName = getFieldValue('customer_name');
+    const contactPhone = getFieldValue('contact_phone') || getFieldValue('phone_number');
+    const broadbandNumber = getFieldValue('broadband_number') || contactPhone;
+    const ssaNumber = getFieldValue('sssa_number');
+    const deliveryAddress = getFieldValue('delivery_address');
+
+    return [
+      `速遞 Router (${routerModel})`,
+      '',
+      `安排送貨日期: ${deliveryDate} (${preferredTimeSlot})`,
+      '',
+      customerName,
+      `聯絡電話: ${contactPhone}`,
+      `寬頻號碼: ${broadbandNumber}`,
+      `Ssa no: ${ssaNumber}`,
+      '送貨地址 :',
+      deliveryAddress,
+    ].join('\n');
+  };
+
+  const validateMessageFields = () => {
+    const requiredFields = [
+      { name: 'router_model', label: 'Router 型號' },
+      { name: 'delivery_date', label: '安排送貨日期' },
+      { name: 'preferred_time_slot', label: '送貨時段' },
+      { name: 'customer_name', label: '客戶姓名' },
+      { name: 'contact_phone', label: '聯絡電話' },
+      { name: 'sssa_number', label: 'Ssa no' },
+      { name: 'delivery_address', label: '送貨地址' },
+    ];
+
+    const missing = requiredFields.find(({ name }) => !getFieldValue(name));
+    if (missing) {
+      throw new Error(`請先填寫：${missing.label}`);
+    }
+  };
+
+  const loadDraft = () => {
+    try {
+      const draftRaw = localStorage.getItem(DRAFT_STORAGE_KEY);
+      if (!draftRaw) return;
+      const draft = JSON.parse(draftRaw);
+      draftFieldNames.forEach((fieldName) => {
+        const input = form.querySelector(`[name="${fieldName}"]`);
+        if (!input || input.value) return;
+        if (typeof draft[fieldName] === 'string') {
+          input.value = draft[fieldName];
+        }
+      });
+    } catch (error) {
+      console.warn('Failed to load router delivery draft:', error);
+    }
+  };
+
+  const saveDraft = () => {
+    const draft = {};
+    draftFieldNames.forEach((fieldName) => {
+      draft[fieldName] = getFieldValue(fieldName);
+    });
+    try {
+      localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
+    } catch (error) {
+      console.warn('Failed to save router delivery draft:', error);
+    }
+  };
+
+  const bindDraftAutoSave = () => {
+    draftFieldNames.forEach((fieldName) => {
+      const input = form.querySelector(`[name="${fieldName}"]`);
+      if (!input) return;
+      input.addEventListener('input', saveDraft);
+      input.addEventListener('change', saveDraft);
+    });
   };
 
   ocrButton?.addEventListener('click', async () => {
@@ -285,6 +389,7 @@
         }
       });
       setStatus('OCR 完成，已嘗試自動填表。');
+      saveDraft();
     } catch (error) {
       setStatus(error.message || 'OCR 失敗，請手動輸入。', true);
     } finally {
@@ -292,19 +397,27 @@
     }
   });
 
+  bossWaGenerateButton?.addEventListener('click', () => {
+    try {
+      validateMessageFields();
+      const message = buildMessage();
+      const encoded = encodeURIComponent(message);
+      window.open(`https://wa.me/${SUPERVISOR_PHONE}?text=${encoded}`, '_blank');
+    } catch (error) {
+      window.alert(error.message || '無法產生 WhatsApp 訊息');
+    }
+  });
+
   document.querySelectorAll('.boss-wa-btn').forEach((button) => {
     button.addEventListener('click', () => {
-      const savedPhone = localStorage.getItem('boss_whatsapp_phone') || '';
-      const phone = window.prompt('請輸入上司 WhatsApp 號碼（只輸入數字，例：85291234567）', savedPhone);
-      if (!phone) return;
-      const cleanedPhone = phone.replace(/\D/g, '');
-      if (!cleanedPhone) return;
-      localStorage.setItem('boss_whatsapp_phone', cleanedPhone);
       const message = button.dataset.message || '';
       const encoded = encodeURIComponent(message);
-      window.open(`https://wa.me/${cleanedPhone}/?text=${encoded}`, '_blank');
+      window.open(`https://wa.me/${SUPERVISOR_PHONE}?text=${encoded}`, '_blank');
     });
   });
+
+  loadDraft();
+  bindDraftAutoSave();
 })();
 </script>
 {% endblock %}
