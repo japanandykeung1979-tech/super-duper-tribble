@@ -322,6 +322,8 @@ def build_appointment_filters(args) -> tuple[str, list[Any]]:
     contract_end_date = args.get("contract_end_date", "").strip()
     current_plan_usage = args.get("current_plan_usage", "").strip()
     remark = args.get("remark", "").strip()
+    sort_by = args.get("sort_by", "").strip()
+    sort_order = args.get("sort_order", "").strip().lower()
 
     if phone_number:
         query += " AND phone_number LIKE ?"
@@ -342,7 +344,13 @@ def build_appointment_filters(args) -> tuple[str, list[Any]]:
         query += " AND remark LIKE ?"
         params.append(f"%{remark}%")
 
-    query += " ORDER BY created_at DESC"
+    if sort_by == "contract_end_date" and sort_order in {"asc", "desc"}:
+        query += (
+            " ORDER BY CASE WHEN contract_end_date IS NULL OR contract_end_date = '' THEN 1 ELSE 0 END, "
+            f"contract_end_date {sort_order}, created_at DESC"
+        )
+    else:
+        query += " ORDER BY created_at DESC"
     return query, params
 
 
@@ -835,7 +843,14 @@ def appointments():
                 "contract_end_date": request.form.get("contract_end_date", "").strip(),
                 "current_plan_usage": request.form.get("current_plan_usage", "").strip(),
                 "remark": request.form.get("remark", "").strip(),
+                "sort_by": request.form.get("sort_by", "").strip(),
+                "sort_order": request.form.get("sort_order", "").strip().lower(),
             }
+            if search_params["sort_by"] != "contract_end_date":
+                search_params["sort_by"] = ""
+                search_params["sort_order"] = ""
+            elif search_params["sort_order"] not in {"asc", "desc"}:
+                search_params["sort_order"] = "asc"
             cleaned_params = {key: value for key, value in search_params.items() if value}
             return redirect(url_for("appointments", **cleaned_params))
 
@@ -913,8 +928,7 @@ def export_appointments():
 
     columns = [
         ("phone_number", "電話號碼"),
-        ("telecom_category", "電訊商"),
-        ("current_telecom", "公司名"),
+        ("current_telecom", "公司名稱"),
         ("contract_end_date", "合約完結日"),
         ("current_plan_usage", "月費及用量"),
         ("remark", "備註"),
