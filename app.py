@@ -382,8 +382,10 @@ def build_order_filters(args) -> tuple[str, list[Any]]:
         month = args.get(f"{field}_month", "").strip()
         year = args.get(f"{field}_year", "").strip()
         if month and year:
-            query += f" AND strftime('%m', {field}) = ? AND strftime('%Y', {field}) = ?"
-            params.extend([month.zfill(2), year])
+            date_range = build_month_year_date_range(month, year)
+            if date_range:
+                query += f" AND {field} >= ? AND {field} < ?"
+                params.extend(date_range)
 
     if keyword:
         query += " AND (a_card_number LIKE ? OR b_card_number LIKE ? OR remark LIKE ?)"
@@ -615,6 +617,22 @@ def parse_date(date_str: str) -> datetime | None:
         return None
 
 
+def build_month_year_date_range(month: str, year: str) -> tuple[str, str] | None:
+    try:
+        month_int = int(month)
+        year_int = int(year)
+        if not 1 <= month_int <= 12:
+            return None
+        start = datetime(year_int, month_int, 1)
+        if month_int == 12:
+            end = datetime(year_int + 1, 1, 1)
+        else:
+            end = datetime(year_int, month_int + 1, 1)
+        return start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d")
+    except ValueError:
+        return None
+
+
 def should_remind_within_30_days(contract_date_str: str) -> bool:
     parsed = parse_date(contract_date_str)
     if parsed is None:
@@ -626,8 +644,18 @@ def should_remind_within_30_days(contract_date_str: str) -> bool:
 def build_dashboard_metrics(orders: list[sqlite3.Row]) -> dict[str, Any]:
     today = datetime.now().date()
     upcoming_contracts: list[dict[str, Any]] = []
+    pps_total = 0
+    ns_total = 0
+    photo_total = 0
 
     for order in orders:
+        if order["pps"]:
+            pps_total += 1
+        if order["ns"]:
+            ns_total += 1
+        if order["photo_path"]:
+            photo_total += 1
+
         contract_date = parse_date(order["contract_end_date"])
         if contract_date is None:
             continue
@@ -648,9 +676,9 @@ def build_dashboard_metrics(orders: list[sqlite3.Row]) -> dict[str, Any]:
 
     return {
         "total": len(orders),
-        "pps_total": sum(1 for order in orders if order["pps"]),
-        "ns_total": sum(1 for order in orders if order["ns"]),
-        "photo_total": sum(1 for order in orders if order["photo_path"]),
+        "pps_total": pps_total,
+        "ns_total": ns_total,
+        "photo_total": photo_total,
         "upcoming_contracts": upcoming_contracts[:5],
     }
 
@@ -837,12 +865,12 @@ def run_ocr_on_image_bytes(image_bytes: bytes) -> str:
     try:
         from PIL import Image, ImageEnhance, ImageOps
 
-        image = Image.open(BytesIO(image_bytes))
-        image = ImageOps.exif_transpose(image).convert("RGB")
+        with Image.open(BytesIO(image_bytes)) as raw_image:
+            image = ImageOps.exif_transpose(raw_image).convert("RGB")
 
-        # 手機拍攝身份證常見情況：反光、陰影、字體偏細。先灰階+提高對比有助 OCR。
-        grayscale = ImageOps.grayscale(image)
-        boosted = ImageEnhance.Contrast(grayscale).enhance(1.8)
+            # 手機拍攝身份證常見情況：反光、陰影、字體偏細。先灰階+提高對比有助 OCR。
+            grayscale = ImageOps.grayscale(image)
+            boosted = ImageEnhance.Contrast(grayscale).enhance(1.8)
 
         # 先用中英混合語言，若環境未安裝 chi_tra 再回退到英文。
         try:
