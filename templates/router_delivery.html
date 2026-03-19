@@ -8,7 +8,7 @@
       <small class="text-muted">結合工程與銷售視角：排程、安裝、跟進一次完成。</small>
     </div>
 
-    <form method="post" class="row g-3 align-items-end">
+    <form method="post" enctype="multipart/form-data" class="row g-3 align-items-end">
       <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
       <div class="col-12">
         <div class="border rounded p-3 bg-light-subtle">
@@ -28,7 +28,7 @@
             </div>
             <div class="col-12 col-lg-3">
               <label class="form-label">舊有寬頻合約期 *</label>
-              <input type="text" class="form-control" name="old_broadband_contract_period" value="{{ request.args.get('old_broadband_contract_period','') }}" placeholder="例如：至 2026-10 / 已完約">
+              <input type="date" class="form-control" name="old_broadband_contract_period" value="{{ request.args.get('old_broadband_contract_period','') }}">
             </div>
 
             <div class="col-12 col-lg-6">
@@ -55,7 +55,7 @@
             </div>
 
             <div class="col-12 col-lg-3">
-              <label class="form-label">進度狀態（銷售）</label>
+              <label class="form-label">送貨狀態</label>
               <select class="form-select" name="status">
                 <option value="">全部狀態</option>
                 {% for option in delivery_status_options %}
@@ -64,13 +64,40 @@
               </select>
             </div>
             <div class="col-12 col-lg-3">
-              <label class="form-label">銷售負責人</label>
-              <input type="text" class="form-control" name="sales_owner" placeholder="例如：Chan / Team A">
+              <label class="form-label">送貨方式 *</label>
+              <select class="form-select" name="delivery_method">
+                <option value="">全部方式</option>
+                {% for option in delivery_status_options %}
+                <option value="{{ option }}" {% if request.args.get('delivery_method','') == option %}selected{% endif %}>{{ option }}</option>
+                {% endfor %}
+              </select>
             </div>
             <div class="col-12 col-lg-3">
               <div class="form-check mt-4">
                 <input class="form-check-input" type="checkbox" value="1" id="requires-installation" name="requires_installation" {% if request.args.get('requires_installation','') == '1' %}checked{% endif %}>
                 <label class="form-check-label" for="requires-installation">需要上門安裝</label>
+              </div>
+            </div>
+            <div class="col-12 col-lg-3">
+              <label class="form-label">聯絡人</label>
+              <input type="text" class="form-control" name="contact_person" placeholder="例如：陳生">
+            </div>
+            <div class="col-12 col-lg-3">
+              <label class="form-label">單號碼</label>
+              <input type="text" class="form-control" name="order_reference" placeholder="例如：R20260319-001">
+            </div>
+            <div class="col-12 col-lg-3">
+              <label class="form-label">現場相片（相機）</label>
+              <input type="file" class="form-control" name="delivery_photo" accept="image/*" capture="environment">
+            </div>
+            <div class="col-12 col-lg-3">
+              <div class="form-check mt-4">
+                <input class="form-check-input" type="checkbox" value="1" id="sort-delivery-date" name="sort_delivery_date" {% if request.args.get('sort_delivery_date','') == '1' %}checked{% endif %}>
+                <label class="form-check-label" for="sort-delivery-date">按送貨日期排序</label>
+              </div>
+              <div class="form-check mt-1">
+                <input class="form-check-input" type="checkbox" value="1" id="sort-contract-period" name="sort_contract_period" {% if request.args.get('sort_contract_period','') == '1' %}checked{% endif %}>
+                <label class="form-check-label" for="sort-contract-period">按舊約期排序</label>
               </div>
             </div>
             <div class="col-12">
@@ -104,8 +131,12 @@
             <th>地址</th>
             <th>時段</th>
             <th>型號</th>
+            <th>聯絡人</th>
+            <th>單號碼</th>
+            <th>送貨方式</th>
             <th>安裝</th>
             <th>狀態</th>
+            <th>相片</th>
             <th>備註</th>
             <th>操作</th>
           </tr>
@@ -120,12 +151,29 @@
             <td class="cell-note">{{ item['delivery_address'] }}</td>
             <td>{{ item['preferred_time_slot'] or '-' }}</td>
             <td>{{ item['router_model'] }}</td>
+            <td>{{ item['contact_person'] or '-' }}</td>
+            <td>{{ item['order_reference'] or ('#' ~ item['id']) }}</td>
+            <td>{{ item['delivery_method'] or '-' }}</td>
             <td>{{ '需要' if item['requires_installation'] else '不需要' }}</td>
             <td>{{ item['status'] }}</td>
+            <td>
+              {% if item['photo_path'] %}
+              <a href="{{ url_for('static', filename=item['photo_path']) }}" target="_blank" rel="noopener">查看</a>
+              {% else %}
+              -
+              {% endif %}
+            </td>
             <td class="cell-note">{{ item['remark'] or '-' }}</td>
             <td class="cell-actions">
+              {% set whatsapp_message = '送貨通知\n單號：' ~ (item['order_reference'] or ('#' ~ item['id'])) ~ '\n客戶：' ~ item['customer_name'] ~ '\n聯絡人：' ~ (item['contact_person'] or item['customer_name']) ~ '\n聯絡電話：' ~ item['phone_number'] ~ '\n送貨日期：' ~ (item['delivery_date'] or '-') ~ '\n送貨時段：' ~ (item['preferred_time_slot'] or '-') ~ '\n送貨地點：' ~ item['delivery_address'] %}
               <div class="d-flex gap-2">
                 <a class="btn btn-sm btn-outline-primary" href="{{ url_for('edit_router_delivery', delivery_id=item['id']) }}">編輯</a>
+                <a
+                  class="btn btn-sm btn-success"
+                  target="_blank"
+                  rel="noopener"
+                  href="https://wa.me/?text={{ whatsapp_message|urlencode }}"
+                >WhatsApp</a>
                 <form method="post" action="{{ url_for('delete_router_delivery', delivery_id=item['id'], **request.args.to_dict(flat=False)) }}" onsubmit="return confirm('確定要刪除此筆送貨記錄嗎？');">
                   <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
                   <button type="submit" class="btn btn-sm btn-outline-danger">刪除</button>
@@ -134,7 +182,7 @@
             </td>
           </tr>
           {% else %}
-          <tr><td colspan="11" class="text-center text-muted py-4">沒有符合條件的送貨記錄。</td></tr>
+          <tr><td colspan="16" class="text-center text-muted py-4">沒有符合條件的送貨記錄。</td></tr>
           {% endfor %}
         </tbody>
       </table>
