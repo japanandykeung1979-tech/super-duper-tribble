@@ -4,17 +4,30 @@
 <div class="card shadow-sm">
   <div class="card-body">
     <h2 class="h5 mb-3">編輯未登記及預約簽單紀錄 #{{ appointment_id }}</h2>
-    <form method="post" class="row g-3">
+    <form method="post" enctype="multipart/form-data" class="row g-3">
       <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
       <div class="col-12 col-lg-6">
         <label class="form-label">電話號碼</label>
         <input type="tel" class="form-control" name="phone_number" value="{{ appointment['phone_number'] }}" required>
       </div>
       <div class="col-12 col-lg-6">
+        <label class="form-label d-block">電訊商分類</label>
+        <div class="d-flex gap-3 align-items-center mt-2">
+          <div class="form-check">
+            <input class="form-check-input" type="radio" name="telecom_category" id="edit-category-3hk" value="3HK" {% if appointment['telecom_category'] == '3HK' %}checked{% endif %} required>
+            <label class="form-check-label" for="edit-category-3hk">3HK</label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="radio" name="telecom_category" id="edit-category-other" value="其他公司" {% if appointment['telecom_category'] != '3HK' %}checked{% endif %} required>
+            <label class="form-check-label" for="edit-category-other">其他公司</label>
+          </div>
+        </div>
+      </div>
+      <div class="col-12 col-lg-6">
         <label class="form-label">公司名</label>
-        <select class="form-select" name="current_telecom" required>
+        <select class="form-select" name="other_company_name" id="edit-other-company" required>
           <option value="">請選擇公司名</option>
-          {% for option in telecom_options %}
+          {% for option in other_company_options %}
           <option value="{{ option }}" {% if appointment['current_telecom'] == option %}selected{% endif %}>{{ option }}</option>
           {% endfor %}
         </select>
@@ -28,6 +41,15 @@
         <input type="text" class="form-control" name="current_plan_usage" value="{{ appointment['current_plan_usage'] }}">
       </div>
       <div class="col-12">
+        <label class="form-label">客戶相片（可更新）</label>
+        <input type="file" class="form-control" name="appointment_photo" accept="image/*" capture="environment">
+        {% if appointment['photo_path'] %}
+        <div class="mt-2">
+          <img src="{{ url_for('static', filename=appointment['photo_path']) }}" alt="現有客戶相片" class="img-thumbnail" style="width: 96px; height: 96px; object-fit: cover;">
+        </div>
+        {% endif %}
+      </div>
+      <div class="col-12">
         <label class="form-label">備註（最多 100 字）</label>
         <textarea class="form-control" name="remark" rows="3" maxlength="100">{{ appointment['remark'] }}</textarea>
       </div>
@@ -38,4 +60,27 @@
     </form>
   </div>
 </div>
+<script>
+  (() => {
+    const category3hk = document.getElementById('edit-category-3hk');
+    const categoryOther = document.getElementById('edit-category-other');
+    const companySelect = document.getElementById('edit-other-company');
+
+    if (!category3hk || !categoryOther || !companySelect) return;
+
+    const sync = () => {
+      if (category3hk.checked) {
+        companySelect.value = '3HK';
+        companySelect.disabled = true;
+      } else {
+        companySelect.disabled = false;
+        if (companySelect.value === '3HK') companySelect.value = '';
+      }
+    };
+
+    category3hk.addEventListener('change', sync);
+    categoryOther.addEventListener('change', sync);
+    sync();
+  })();
+</script>
 {% endblock %}

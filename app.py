@@ -30,6 +30,7 @@ DNO_OPTIONS = ["CMHK", "CSL", "SmarTone", "3HK", "HKBN", "其他"]
 PLAN_OPTIONS = ["5G Basic", "5G Premium", "4.5G Value", "Family Plan", "Data SIM"]
 TIME_OPTIONS = ["AM", "PM"]
 APPOINTMENT_TELECOM_OPTIONS = ["CSL", "SmarTone", "中國移動", "3HK", "中國聯通", "電訊數碼"]
+APPOINTMENT_OTHER_COMPANY_OPTIONS = ["SmarTone", "CSL", "China Mobile", "中國聯通", "電訊數碼", "其他"]
 DATE_FIELDS = ["contract_end_date", "transfer_out_date", "start_date", "replacement_date"]
 MNP_REQUIRED_FIELDS = [
     "english_name",
@@ -107,10 +108,12 @@ def init_db() -> None:
         CREATE TABLE IF NOT EXISTS appointments (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             phone_number TEXT NOT NULL,
+            telecom_category TEXT NOT NULL DEFAULT '其他公司',
             current_telecom TEXT NOT NULL,
             contract_end_date TEXT,
             current_plan_usage TEXT,
             remark TEXT,
+            photo_path TEXT,
             created_at TEXT NOT NULL
         )
         """
@@ -134,6 +137,17 @@ def init_db() -> None:
     for column, column_type in required_columns.items():
         if column not in existing_columns:
             db.execute(f"ALTER TABLE orders ADD COLUMN {column} {column_type}")
+
+    existing_appointment_columns = {
+        row[1] for row in db.execute("PRAGMA table_info(appointments)").fetchall()
+    }
+    required_appointment_columns = {
+        "telecom_category": "TEXT NOT NULL DEFAULT '其他公司'",
+        "photo_path": "TEXT",
+    }
+    for column, column_type in required_appointment_columns.items():
+        if column not in existing_appointment_columns:
+            db.execute(f"ALTER TABLE appointments ADD COLUMN {column} {column_type}")
 
     db.executescript(
         """
@@ -303,6 +317,7 @@ def build_appointment_filters(args) -> tuple[str, list[Any]]:
     params: list[Any] = []
 
     phone_number = args.get("phone_number", "").strip()
+    telecom_category = args.get("telecom_category", "").strip()
     current_telecom = args.get("current_telecom", "").strip()
     contract_end_date = args.get("contract_end_date", "").strip()
     current_plan_usage = args.get("current_plan_usage", "").strip()
@@ -311,6 +326,9 @@ def build_appointment_filters(args) -> tuple[str, list[Any]]:
     if phone_number:
         query += " AND phone_number LIKE ?"
         params.append(f"%{phone_number}%")
+    if telecom_category:
+        query += " AND telecom_category = ?"
+        params.append(telecom_category)
     if current_telecom:
         query += " AND current_telecom = ?"
         params.append(current_telecom)
@@ -333,15 +351,17 @@ def insert_appointment(data: dict[str, Any]) -> None:
     db.execute(
         """
         INSERT INTO appointments (
-            phone_number, current_telecom, contract_end_date, current_plan_usage, remark, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?)
+            phone_number, telecom_category, current_telecom, contract_end_date, current_plan_usage, remark, photo_path, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             data["phone_number"],
+            data.get("telecom_category", "其他公司"),
             data["current_telecom"],
             data.get("contract_end_date", ""),
             data.get("current_plan_usage", ""),
             data.get("remark", "")[:100],
+            data.get("photo_path", ""),
             datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         ),
     )
@@ -810,6 +830,7 @@ def appointments():
         if action == "search":
             search_params = {
                 "phone_number": request.form.get("phone_number", "").strip(),
+                "telecom_category": request.form.get("telecom_category", "").strip(),
                 "current_telecom": request.form.get("current_telecom", "").strip(),
                 "contract_end_date": request.form.get("contract_end_date", "").strip(),
                 "current_plan_usage": request.form.get("current_plan_usage", "").strip(),
@@ -819,16 +840,44 @@ def appointments():
             return redirect(url_for("appointments", **cleaned_params))
 
         if action == "add":
+            has_3hk = request.form.get("telecom_3hk") == "1"
+            has_other = request.form.get("telecom_other") == "1"
+            other_company_name = request.form.get("other_company_name", "").strip()
+
+            if has_3hk and has_other:
+                flash("請只可選擇一個電訊商分類。", "danger")
+                return redirect(url_for("appointments", **request.args.to_dict(flat=False)))
+            if not has_3hk and not has_other:
+                flash("請先剔選電訊商分類（3HK 或 其他公司）。", "danger")
+                return redirect(url_for("appointments", **request.args.to_dict(flat=False)))
+
+            if has_3hk:
+                telecom_category = "3HK"
+                telecom_provider = "3HK"
+            else:
+                telecom_category = "其他公司"
+                telecom_provider = other_company_name
+                if telecom_provider not in APPOINTMENT_OTHER_COMPANY_OPTIONS:
+                    flash("請選擇有效的其他公司名稱。", "danger")
+                    return redirect(url_for("appointments", **request.args.to_dict(flat=False)))
+
             form_data = {
                 "phone_number": request.form.get("phone_number", "").strip(),
-                "current_telecom": request.form.get("current_telecom", "").strip(),
+                "telecom_category": telecom_category,
+                "current_telecom": telecom_provider,
                 "contract_end_date": request.form.get("contract_end_date", "").strip(),
                 "current_plan_usage": request.form.get("current_plan_usage", "").strip(),
                 "remark": request.form.get("remark", "").strip()[:100],
             }
+            appointment_photo = request.files.get("appointment_photo")
+            form_data["photo_path"] = save_uploaded_photo(appointment_photo)
 
-            if not form_data["phone_number"] or form_data["current_telecom"] not in APPOINTMENT_TELECOM_OPTIONS:
-                flash("請填寫電話號碼，並選擇有效公司名。", "danger")
+            if appointment_photo and appointment_photo.filename and not form_data["photo_path"]:
+                flash("相片格式不支援，請上傳圖片檔案。", "danger")
+                return redirect(url_for("appointments", **request.args.to_dict(flat=False)))
+
+            if not form_data["phone_number"]:
+                flash("請填寫電話號碼。", "danger")
                 return redirect(url_for("appointments", **request.args.to_dict(flat=False)))
 
             insert_appointment(form_data)
@@ -846,6 +895,7 @@ def appointments():
         "appointments.html",
         appointments=appointments_data,
         telecom_options=APPOINTMENT_TELECOM_OPTIONS,
+        other_company_options=APPOINTMENT_OTHER_COMPANY_OPTIONS,
     )
 
 
@@ -863,10 +913,12 @@ def export_appointments():
 
     columns = [
         ("phone_number", "電話號碼"),
+        ("telecom_category", "電訊商"),
         ("current_telecom", "公司名"),
         ("contract_end_date", "合約完結日"),
         ("current_plan_usage", "月費及用量"),
         ("remark", "備註"),
+        ("photo_path", "相片路徑"),
         ("created_at", "建立時間"),
     ]
     filename_time = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -1085,36 +1137,67 @@ def edit_appointment(appointment_id: int):
         return redirect(url_for("appointments"))
 
     if request.method == "POST":
+        telecom_category = request.form.get("telecom_category", "").strip()
+        selected_other_company = request.form.get("other_company_name", "").strip()
+        if telecom_category == "3HK":
+            provider = "3HK"
+        elif telecom_category == "其他公司":
+            provider = selected_other_company
+        else:
+            provider = ""
+
         form_data = {
             "phone_number": request.form.get("phone_number", "").strip(),
-            "current_telecom": request.form.get("current_telecom", "").strip(),
+            "telecom_category": telecom_category,
+            "current_telecom": provider,
             "contract_end_date": request.form.get("contract_end_date", "").strip(),
             "current_plan_usage": request.form.get("current_plan_usage", "").strip(),
             "remark": request.form.get("remark", "").strip()[:100],
         }
 
-        if not form_data["phone_number"] or form_data["current_telecom"] not in APPOINTMENT_TELECOM_OPTIONS:
+        appointment_photo = request.files.get("appointment_photo")
+        new_photo_path = save_uploaded_photo(appointment_photo)
+        if appointment_photo and appointment_photo.filename and not new_photo_path:
+            flash("相片格式不支援，請上傳圖片檔案。", "danger")
+            return render_template(
+                "edit_appointment.html",
+                appointment=form_data,
+                appointment_id=appointment_id,
+                other_company_options=APPOINTMENT_OTHER_COMPANY_OPTIONS,
+            )
+        form_data["photo_path"] = new_photo_path or appointment["photo_path"] or ""
+
+        if telecom_category == "其他公司" and form_data["current_telecom"] not in APPOINTMENT_OTHER_COMPANY_OPTIONS:
+            provider_valid = False
+        elif telecom_category == "3HK" and form_data["current_telecom"] == "3HK":
+            provider_valid = True
+        else:
+            provider_valid = False
+
+        if not form_data["phone_number"] or not provider_valid:
             flash("資料不完整或包含無效欄位，請檢查後重試。", "danger")
             return render_template(
                 "edit_appointment.html",
                 appointment=form_data,
                 appointment_id=appointment_id,
-                telecom_options=APPOINTMENT_TELECOM_OPTIONS,
+                other_company_options=APPOINTMENT_OTHER_COMPANY_OPTIONS,
             )
 
         db = get_db()
         db.execute(
             """
             UPDATE appointments
-            SET phone_number = ?, current_telecom = ?, contract_end_date = ?, current_plan_usage = ?, remark = ?
+            SET phone_number = ?, telecom_category = ?, current_telecom = ?, contract_end_date = ?, current_plan_usage = ?, remark = ?, photo_path = ?
             WHERE id = ?
             """,
             (
                 form_data["phone_number"],
+                form_data["telecom_category"],
                 form_data["current_telecom"],
                 form_data["contract_end_date"],
                 form_data["current_plan_usage"],
                 form_data["remark"],
+                form_data["photo_path"],
                 appointment_id,
             ),
         )
@@ -1126,7 +1209,7 @@ def edit_appointment(appointment_id: int):
         "edit_appointment.html",
         appointment=appointment,
         appointment_id=appointment_id,
-        telecom_options=APPOINTMENT_TELECOM_OPTIONS,
+        other_company_options=APPOINTMENT_OTHER_COMPANY_OPTIONS,
     )
 
 
