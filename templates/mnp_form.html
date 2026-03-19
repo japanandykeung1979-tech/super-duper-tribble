@@ -1,34 +1,53 @@
 {% extends 'base.html' %}
 {% block title %}MNP Form - Telecom CRM{% endblock %}
 {% block content %}
-<div class="card shadow-sm">
-  <div class="card-body">
-    <h2 class="h5 mb-3">轉台登記表單</h2>
-    <form method="post" enctype="multipart/form-data" class="row g-3">
+<div class="card shadow-sm mnp-card">
+  <div class="card-body p-3 p-md-4">
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-end gap-2 mb-3">
+      <div>
+        <h2 class="h4 mb-1 fw-bold">轉台登記表</h2>
+        <p class="text-secondary mb-0 small">可先拍攝香港身份證，再按「掃描並自動填寫」快速帶入資料。</p>
+      </div>
+      <span class="badge text-bg-light border">* 為必填欄位</span>
+    </div>
+
+    <form method="post" enctype="multipart/form-data" class="row g-3" novalidate>
       <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+
+      <div class="col-12">
+        <label class="form-label fw-semibold" for="photo-input">身份證照片</label>
+        <div class="d-flex flex-column flex-md-row gap-2 align-items-md-center">
+          <input type="file" id="photo-input" name="photo" class="form-control" accept="image/*" capture="environment">
+          <button type="button" id="scan-auto-fill" class="btn btn-outline-primary text-nowrap">掃描並自動填寫</button>
+        </div>
+        <div id="ocr-status" class="form-text mt-2">建議使用清晰、光線平均、完整包含身份證四角的照片。</div>
+      </div>
+
+      <hr class="my-1">
+
       <div class="col-12 col-md-6">
-        <label class="form-label">英文名</label>
-        <input type="text" name="english_name" class="form-control" value="{{ form_data.get('english_name', '') }}" required>
+        <label class="form-label" for="english_name">英文名 *</label>
+        <input id="english_name" type="text" name="english_name" class="form-control" value="{{ form_data.get('english_name', '') }}" required autocomplete="name">
       </div>
       <div class="col-12 col-md-6">
-        <label class="form-label">中文名</label>
-        <input type="text" name="chinese_name" class="form-control" value="{{ form_data.get('chinese_name', '') }}" required>
+        <label class="form-label" for="chinese_name">中文名 *</label>
+        <input id="chinese_name" type="text" name="chinese_name" class="form-control" value="{{ form_data.get('chinese_name', '') }}" required>
       </div>
       <div class="col-12 col-md-6">
-        <label class="form-label">HKID</label>
-        <input type="text" name="hkid" class="form-control" value="{{ form_data.get('hkid', '') }}" required>
+        <label class="form-label" for="hkid">香港身份證 *</label>
+        <input id="hkid" type="text" name="hkid" class="form-control text-uppercase" value="{{ form_data.get('hkid', '') }}" required placeholder="例：A123456(7)">
       </div>
       <div class="col-12 col-md-6">
-        <label class="form-label">轉台號碼 (Port-in Number)</label>
-        <input type="text" name="port_in_number" class="form-control" value="{{ form_data.get('port_in_number', '') }}" required>
+        <label class="form-label" for="port_in_number">轉台號碼 (Port-in Number) *</label>
+        <input id="port_in_number" type="text" name="port_in_number" class="form-control" value="{{ form_data.get('port_in_number', '') }}" required inputmode="numeric">
       </div>
       <div class="col-12 col-md-6">
-        <label class="form-label">SIM Number</label>
-        <input type="text" name="sim_number" class="form-control" value="{{ form_data.get('sim_number', '') }}" required>
+        <label class="form-label" for="sim_number">SIM 卡號碼 *</label>
+        <input id="sim_number" type="text" name="sim_number" class="form-control" value="{{ form_data.get('sim_number', '') }}" required>
       </div>
       <div class="col-12 col-md-6">
-        <label class="form-label">DNO</label>
-        <select name="dno" class="form-select" required>
+        <label class="form-label" for="dno">配電網路營運商 (DNO) *</label>
+        <select id="dno" name="dno" class="form-select" required>
           <option value="">請選擇</option>
           {% for dno in dno_options %}
           <option value="{{ dno }}" {% if form_data.get('dno') == dno %}selected{% endif %}>{{ dno }}</option>
@@ -36,12 +55,12 @@
         </select>
       </div>
       <div class="col-12 col-md-6">
-        <label class="form-label">Card Type</label>
-        <input type="text" name="card_type" class="form-control" value="{{ form_data.get('card_type', '') }}" required>
+        <label class="form-label" for="card_type">卡片類型 *</label>
+        <input id="card_type" type="text" name="card_type" class="form-control" value="{{ form_data.get('card_type', '') }}" required>
       </div>
       <div class="col-12 col-md-6">
-        <label class="form-label">Plan</label>
-        <select name="plan" class="form-select" required>
+        <label class="form-label" for="plan">計劃 *</label>
+        <select id="plan" name="plan" class="form-select" required>
           <option value="">請選擇</option>
           {% for plan in plan_options %}
           <option value="{{ plan }}" {% if form_data.get('plan') == plan %}selected{% endif %}>{{ plan }}</option>
@@ -49,12 +68,12 @@
         </select>
       </div>
       <div class="col-12 col-md-6">
-        <label class="form-label">Cutover Date</label>
-        <input type="date" name="cutover_date" class="form-control" value="{{ form_data.get('cutover_date', '') }}" required>
+        <label class="form-label" for="cutover_date">切換日期 *</label>
+        <input id="cutover_date" type="date" name="cutover_date" class="form-control" value="{{ form_data.get('cutover_date', '') }}" required>
       </div>
       <div class="col-12 col-md-6">
-        <label class="form-label">Cutover Time</label>
-        <select name="cutover_time" class="form-select" required>
+        <label class="form-label" for="cutover_time">切換時間 *</label>
+        <select id="cutover_time" name="cutover_time" class="form-select" required>
           <option value="">請選擇</option>
           {% for time in time_options %}
           <option value="{{ time }}" {% if form_data.get('cutover_time') == time %}selected{% endif %}>{{ time }}</option>
@@ -63,16 +82,16 @@
       </div>
 
       <div class="col-12 col-md-6">
-        <label class="form-label">A咭號碼</label>
+        <label class="form-label" for="a-card-number">A咭號碼 *</label>
         <input type="text" id="a-card-number" name="a_card_number" class="form-control" value="{{ form_data.get('a_card_number', '') }}" required>
       </div>
       <div class="col-12 col-md-6">
-        <label class="form-label">B咭號碼</label>
-        <input type="text" name="b_card_number" class="form-control" value="{{ form_data.get('b_card_number', '') }}" required>
+        <label class="form-label" for="b-card-number">B咭號碼 *</label>
+        <input type="text" id="b-card-number" name="b_card_number" class="form-control" value="{{ form_data.get('b_card_number', '') }}" required>
         <div class="mt-2 d-flex gap-3">
           <div class="form-check">
             <input class="form-check-input" type="checkbox" name="pps" value="1" id="form-pps" {% if form_data.get('pps') %}checked{% endif %}>
-            <label class="form-check-label" for="form-pps">PPS</label>
+            <label class="form-check-label" for="form-pps">個人電源 (PPS)</label>
           </div>
           <div class="form-check">
             <input class="form-check-input" type="checkbox" name="ns" value="1" id="form-ns" {% if form_data.get('ns') %}checked{% endif %}>
@@ -81,58 +100,83 @@
         </div>
       </div>
       <div class="col-12 col-md-6">
-        <label class="form-label">3HK合約完結日</label>
-        <input type="date" name="contract_end_date" class="form-control" value="{{ form_data.get('contract_end_date', '') }}" required>
+        <label class="form-label" for="contract_end_date">3HK 合約完結日 *</label>
+        <input id="contract_end_date" type="date" name="contract_end_date" class="form-control" value="{{ form_data.get('contract_end_date', '') }}" required>
       </div>
       <div class="col-12 col-md-6">
-        <label class="form-label">轉走日期</label>
-        <input type="date" name="transfer_out_date" class="form-control" value="{{ form_data.get('transfer_out_date', '') }}" required>
+        <label class="form-label" for="transfer_out_date">轉走日期 *</label>
+        <input id="transfer_out_date" type="date" name="transfer_out_date" class="form-control" value="{{ form_data.get('transfer_out_date', '') }}" required>
       </div>
       <div class="col-12 col-md-6">
-        <label class="form-label">開始日期</label>
-        <input type="date" name="start_date" class="form-control" value="{{ form_data.get('start_date', '') }}" required>
+        <label class="form-label" for="start_date">開始日期 *</label>
+        <input id="start_date" type="date" name="start_date" class="form-control" value="{{ form_data.get('start_date', '') }}" required>
       </div>
       <div class="col-12 col-md-6">
-        <label class="form-label">取代日期</label>
-        <input type="date" name="replacement_date" class="form-control" value="{{ form_data.get('replacement_date', '') }}" required>
+        <label class="form-label" for="replacement_date">取代日期 *</label>
+        <input id="replacement_date" type="date" name="replacement_date" class="form-control" value="{{ form_data.get('replacement_date', '') }}" required>
       </div>
 
       <div class="col-12 col-md-6">
-        <label class="form-label">代登記實名</label>
-        <select name="real_name_registration" class="form-select" required>
+        <label class="form-label" for="real_name_registration">代登記實名 *</label>
+        <select id="real_name_registration" name="real_name_registration" class="form-select" required>
           <option value="">請選擇</option>
           <option value="是" {% if form_data.get('real_name_registration') == '是' %}selected{% endif %}>是</option>
           <option value="否" {% if form_data.get('real_name_registration') == '否' %}selected{% endif %}>否</option>
         </select>
       </div>
       <div class="col-12">
-        <label class="form-label">備註 (Remark)</label>
-        <textarea name="remark" class="form-control" rows="3" maxlength="100">{{ form_data.get('remark', '') }}</textarea>
+        <label class="form-label" for="remark">備註 (最多100字)</label>
+        <textarea id="remark" name="remark" class="form-control" rows="3" maxlength="100">{{ form_data.get('remark', '') }}</textarea>
         <div class="form-text">最多 100 字。</div>
       </div>
-      <div class="col-12">
-        <label class="form-label">上傳相片</label>
-        <div class="d-flex flex-column flex-md-row gap-2 align-items-md-center">
-          <input type="file" id="photo-input" name="photo" class="form-control" accept="image/*">
-          <button type="button" id="scan-auto-fill" class="btn btn-outline-primary text-nowrap">掃描並自動填寫</button>
-        </div>
-        <div id="ocr-status" class="form-text mt-2"></div>
-      </div>
-      <div class="col-12">
-        <button type="submit" class="btn btn-primary w-100">提交登記</button>
+
+      <div class="col-12 mt-2">
+        <button type="submit" class="btn btn-primary w-100 py-2">提交登記</button>
       </div>
     </form>
   </div>
 </div>
+
+<style>
+  .mnp-card .form-label {
+    font-size: .98rem;
+    margin-bottom: .35rem;
+  }
+  .mnp-card .form-control,
+  .mnp-card .form-select,
+  .mnp-card .btn {
+    min-height: 50px;
+    font-size: 1rem;
+  }
+  .mnp-card .form-check-input {
+    width: 1.3rem;
+    height: 1.3rem;
+  }
+  .mnp-card .form-check-label {
+    margin-left: .25rem;
+    font-size: 1rem;
+  }
+  @media (max-width: 576px) {
+    .mnp-card .card-body {
+      padding: 1rem;
+    }
+    .mnp-card .form-control,
+    .mnp-card .form-select,
+    .mnp-card .btn {
+      min-height: 54px;
+      font-size: 1.08rem;
+    }
+  }
+</style>
 
 <script>
   (() => {
     const scanButton = document.getElementById('scan-auto-fill');
     const photoInput = document.getElementById('photo-input');
     const aCardNumberInput = document.getElementById('a-card-number');
-    const englishNameInput = document.querySelector('input[name="english_name"]');
-    const chineseNameInput = document.querySelector('input[name="chinese_name"]');
-    const hkidInput = document.querySelector('input[name="hkid"]');
+    const englishNameInput = document.getElementById('english_name');
+    const chineseNameInput = document.getElementById('chinese_name');
+    const hkidInput = document.getElementById('hkid');
     const ocrStatus = document.getElementById('ocr-status');
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
 
@@ -140,19 +184,27 @@
       return;
     }
 
+    const setStatus = (text, className) => {
+      ocrStatus.textContent = text;
+      ocrStatus.className = `form-text mt-2 ${className}`;
+    };
+
+    const flashAutoFilled = (element) => {
+      element.classList.add('border-success', 'bg-success-subtle');
+      setTimeout(() => element.classList.remove('border-success', 'bg-success-subtle'), 1400);
+    };
+
     scanButton.addEventListener('click', async () => {
       const selectedFile = photoInput.files && photoInput.files[0];
       if (!selectedFile) {
-        ocrStatus.textContent = '請先選擇一張相片再進行掃描。';
-        ocrStatus.className = 'form-text mt-2 text-danger';
+        setStatus('請先選擇一張相片再進行掃描。', 'text-danger');
         return;
       }
 
       const formData = new FormData();
       formData.append('photo', selectedFile);
 
-      ocrStatus.textContent = '正在辨識中...';
-      ocrStatus.className = 'form-text mt-2 text-primary';
+      setStatus('正在辨識香港身份證，請稍候…', 'text-primary');
       scanButton.disabled = true;
 
       try {
@@ -168,30 +220,38 @@
           throw new Error(result.error || 'OCR 辨識失敗');
         }
 
+        let filledCount = 0;
+
         if (result.english_name) {
           englishNameInput.value = result.english_name;
+          flashAutoFilled(englishNameInput);
+          filledCount += 1;
         }
         if (result.chinese_name) {
           chineseNameInput.value = result.chinese_name;
+          flashAutoFilled(chineseNameInput);
+          filledCount += 1;
         }
         if (result.hkid) {
           hkidInput.value = result.hkid;
+          flashAutoFilled(hkidInput);
+          filledCount += 1;
         }
 
         if (result.sim_card_number) {
           aCardNumberInput.value = result.sim_card_number;
-          ocrStatus.textContent = '辨識完成，已自動填入姓名、HKID 與 A咭號碼。';
-          ocrStatus.className = 'form-text mt-2 text-success';
-        } else if (result.english_name || result.chinese_name || result.hkid) {
-          ocrStatus.textContent = '辨識完成，已填入可辨識到的姓名與 HKID。';
-          ocrStatus.className = 'form-text mt-2 text-success';
+          flashAutoFilled(aCardNumberInput);
+        }
+
+        if (filledCount >= 3) {
+          setStatus('辨識完成：已成功填入英文名、中文名與香港身份證號碼。', 'text-success');
+        } else if (filledCount > 0) {
+          setStatus('辨識完成：已填入部分欄位，請檢查後補齊。', 'text-success');
         } else {
-          ocrStatus.textContent = '未辨識到可用資料，請手動輸入。';
-          ocrStatus.className = 'form-text mt-2 text-warning';
+          setStatus('未辨識到可用資料，建議更換光線或角度後重試。', 'text-warning');
         }
       } catch (error) {
-        ocrStatus.textContent = error.message || 'OCR 辨識失敗，請稍後再試。';
-        ocrStatus.className = 'form-text mt-2 text-danger';
+        setStatus(error.message || 'OCR 辨識失敗，請稍後再試。', 'text-danger');
       } finally {
         scanButton.disabled = false;
       }

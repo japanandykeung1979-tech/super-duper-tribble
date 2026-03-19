@@ -453,30 +453,56 @@ def extract_sim_card_number(ocr_text: str) -> str:
 
 
 def parse_hkid_ocr_fields(ocr_text: str) -> dict[str, str]:
+    """嘗試從香港身份證 OCR 文字中擷取 HKID / 英文名 / 中文名。"""
     compact_text = re.sub(r"\s+", "", ocr_text.upper())
-    hkid_match = re.search(r"\b([A-Z]{1,2}\d{6}\([0-9A]\))\b", compact_text)
-    hkid = hkid_match.group(1) if hkid_match else ""
+
+    hkid_patterns = [
+        r"([A-Z]{1,2}\d{6}\([0-9A]\))",
+        r"([A-Z]{1,2}\d{6}[0-9A])",
+    ]
+    hkid = ""
+    for pattern in hkid_patterns:
+        match = re.search(pattern, compact_text)
+        if match:
+            token = match.group(1)
+            if "(" not in token and len(token) >= 8:
+                token = f"{token[:-1]}({token[-1]})"
+            hkid = token
+            break
 
     lines = [line.strip() for line in ocr_text.splitlines() if line.strip()]
 
     english_name = ""
-    for line in lines:
-        cleaned_line = re.sub(r"[^A-Z,\-\s]", "", line.upper()).strip(" ,-")
-        if not cleaned_line:
+    for index, line in enumerate(lines):
+        upper_line = line.upper()
+        normalized = re.sub(r"[^A-Z,\-\s]", " ", upper_line)
+        normalized = re.sub(r"\s+", " ", normalized).strip(" ,-")
+        if not normalized:
             continue
-        if len(cleaned_line.replace(" ", "")) < 4:
-            continue
-        words = [word for word in re.split(r"[\s,]+", cleaned_line) if word]
+
+        if "NAME" in upper_line or "SURNAME" in upper_line or "GIVEN" in upper_line:
+            name_portion = re.sub(r".*?(NAME|SURNAME|GIVEN\s+NAMES?)[:：]?", "", normalized).strip(" ,-")
+            if name_portion:
+                normalized = name_portion
+            elif index + 1 < len(lines):
+                follow_line = re.sub(r"[^A-Z,\-\s]", " ", lines[index + 1].upper())
+                normalized = re.sub(r"\s+", " ", follow_line).strip(" ,-")
+
+        words = [word for word in re.split(r"[\s,]+", normalized) if word]
         if len(words) < 2:
             continue
         if all(re.fullmatch(r"[A-Z\-]+", word) for word in words):
+            if any(flag in normalized for flag in ["HONG", "KONG", "IDENTITY", "CARD", "PERMANENT"]):
+                continue
             english_name = " ".join(words)
             break
 
     chinese_name = ""
-    chinese_candidates = re.findall(r"[\u4e00-\u9fff]{2,}", ocr_text)
-    if chinese_candidates:
-        chinese_name = max(chinese_candidates, key=len)
+    chinese_candidates = re.findall(r"[\u4e00-\u9fff]{2,5}", ocr_text)
+    blocked_tokens = {"香港", "身份證", "永久", "居民", "出生", "日期", "簽發", "持有人"}
+    filtered_candidates = [token for token in chinese_candidates if token not in blocked_tokens]
+    if filtered_candidates:
+        chinese_name = max(filtered_candidates, key=len)
 
     return {
         "hkid": hkid,
@@ -490,10 +516,28 @@ def run_ocr_on_image_bytes(image_bytes: bytes) -> str:
         raise RuntimeError("OCR 模組未安裝，請先執行 pip install pytesseract。")
 
     try:
-        from PIL import Image
+        from PIL import Image, ImageEnhance, ImageOps
 
         image = Image.open(BytesIO(image_bytes))
-        return pytesseract.image_to_string(image)
+        image = ImageOps.exif_transpose(image).convert("RGB")
+
+        # 手機拍攝身份證常見情況：反光、陰影、字體偏細。先灰階+提高對比有助 OCR。
+        grayscale = ImageOps.grayscale(image)
+        boosted = ImageEnhance.Contrast(grayscale).enhance(1.8)
+
+        # 先用中英混合語言，若環境未安裝 chi_tra 再回退到英文。
+        try:
+            text = pytesseract.image_to_string(boosted, lang="eng+chi_tra", config="--psm 6")
+        except pytesseract.TesseractError:
+            text = pytesseract.image_to_string(boosted, lang="eng", config="--psm 6")
+
+        # 若輸出太少，改用另一種 page segmentation 再試一次。
+        if len(re.sub(r"\s+", "", text)) < 12:
+            fallback_text = pytesseract.image_to_string(boosted, lang="eng", config="--psm 11")
+            if len(re.sub(r"\s+", "", fallback_text)) > len(re.sub(r"\s+", "", text)):
+                text = fallback_text
+
+        return text
     except pytesseract.TesseractNotFoundError as error:
         raise RuntimeError("找不到 Tesseract-OCR 執行檔，請先安裝系統套件。") from error
     except Exception as error:
