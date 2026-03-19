@@ -83,6 +83,11 @@
         </div>
       </div>
       <div class="col-12">
+        <div class="small text-muted">
+          搜尋功能會以「所有已填欄位」做交集篩選（例如同時輸入 A 咭 + 3HK 合約完成日 + 標籤），留空的欄位不會影響結果。
+        </div>
+      </div>
+      <div class="col-12">
         <div id="dashboard-ocr-status" class="form-text"></div>
       </div>
     </form>
@@ -122,23 +127,23 @@
             <th class="text-center">完成</th>
             <th>A 咭</th>
             <th>
-              <button type="button" class="btn btn-link p-0 text-decoration-none fw-semibold text-dark table-sort-trigger" data-sort-index="1" aria-label="按 3HK 合約完成日排序">
+              <button type="button" class="btn btn-link p-0 text-decoration-none fw-semibold text-dark table-sort-trigger" data-sort-index="2" aria-label="按 3HK 合約完成日排序">
                 3HK 合約完成日 <span aria-hidden="true">▲</span>
               </button>
             </th>
             <th>
-              <button type="button" class="btn btn-link p-0 text-decoration-none fw-semibold text-dark table-sort-trigger" data-sort-index="2" aria-label="按 轉走日期排序">
+              <button type="button" class="btn btn-link p-0 text-decoration-none fw-semibold text-dark table-sort-trigger" data-sort-index="3" aria-label="按 轉走日期排序">
                 轉走日期 <span aria-hidden="true">▲</span>
               </button>
             </th>
             <th>B 咭</th>
             <th>
-              <button type="button" class="btn btn-link p-0 text-decoration-none fw-semibold text-dark table-sort-trigger" data-sort-index="4" aria-label="按 開始日期排序">
+              <button type="button" class="btn btn-link p-0 text-decoration-none fw-semibold text-dark table-sort-trigger" data-sort-index="5" aria-label="按 開始日期排序">
                 開始日期 <span aria-hidden="true">▲</span>
               </button>
             </th>
             <th>
-              <button type="button" class="btn btn-link p-0 text-decoration-none fw-semibold text-dark table-sort-trigger" data-sort-index="5" aria-label="按 取代日期排序">
+              <button type="button" class="btn btn-link p-0 text-decoration-none fw-semibold text-dark table-sort-trigger" data-sort-index="6" aria-label="按 取代日期排序">
                 取代日期 <span aria-hidden="true">▲</span>
               </button>
             </th>
@@ -279,6 +284,16 @@
 
     const tableBody = resultsTable.querySelector('tbody');
     if (!tableBody) return;
+    const initialSortDirection = 'asc';
+    let activeSort = {
+      index: null,
+      direction: initialSortDirection,
+    };
+
+    const sortIndicatorMap = {
+      asc: '▲',
+      desc: '▼',
+    };
 
     const parseDateToTimestamp = (dateText) => {
       const normalized = (dateText || '').trim();
@@ -286,6 +301,13 @@
 
       const timestamp = Date.parse(normalized);
       return Number.isNaN(timestamp) ? Number.POSITIVE_INFINITY : timestamp;
+    };
+
+    const resetSortIndicators = () => {
+      sortTriggers.forEach((trigger) => {
+        const indicator = trigger.querySelector('span[aria-hidden="true"]');
+        if (indicator) indicator.textContent = sortIndicatorMap[initialSortDirection];
+      });
     };
 
     sortTriggers.forEach((trigger) => {
@@ -297,13 +319,22 @@
         const dataRows = rows.filter((row) => row.children.length > 1);
         if (!dataRows.length) return;
 
+        const direction = activeSort.index === colIndex && activeSort.direction === 'asc' ? 'desc' : 'asc';
+        activeSort = { index: colIndex, direction };
+
         dataRows.sort((rowA, rowB) => {
           const dateA = parseDateToTimestamp(rowA.children[colIndex]?.textContent);
           const dateB = parseDateToTimestamp(rowB.children[colIndex]?.textContent);
-          return dateA - dateB;
+          return direction === 'asc' ? dateA - dateB : dateB - dateA;
         });
 
         dataRows.forEach((row) => tableBody.appendChild(row));
+
+        resetSortIndicators();
+        const indicator = trigger.querySelector('span[aria-hidden="true"]');
+        if (indicator) {
+          indicator.textContent = sortIndicatorMap[direction];
+        }
       });
     });
 
