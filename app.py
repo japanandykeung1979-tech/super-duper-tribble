@@ -9,6 +9,7 @@ from functools import wraps
 from io import BytesIO, StringIO
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote_plus
 from uuid import uuid4
 from xml.sax.saxutils import escape
 
@@ -32,8 +33,9 @@ TIME_OPTIONS = ["AM", "PM"]
 APPOINTMENT_TELECOM_OPTIONS = ["CSL", "SmarTone", "中國移動", "3HK", "中國聯通", "電訊數碼"]
 APPOINTMENT_OTHER_COMPANY_OPTIONS = ["SmarTone", "CSL", "China Mobile", "中國聯通", "電訊數碼", "其他"]
 ROUTER_MODEL_OPTIONS = ["Wi-Fi 7", "Wi-Fi 6"]
-DELIVERY_TIME_SLOT_OPTIONS = ["星期二", "星期四", "星期六"]
+DELIVERY_TIME_SLOT_OPTIONS = ["二至四", "四至六"]
 DELIVERY_STATUS_OPTIONS = ["自行送貨", "速遞"]
+ENGINEER_LEVEL_OPTIONS = ["初級", "中級", "高級"]
 DATE_FIELDS = ["contract_end_date", "transfer_out_date", "start_date", "replacement_date"]
 MNP_REQUIRED_FIELDS = [
     "english_name",
@@ -129,15 +131,19 @@ def init_db() -> None:
             phone_number TEXT NOT NULL,
             customer_name TEXT NOT NULL,
             contact_person TEXT,
+            contact_phone TEXT,
             delivery_address TEXT NOT NULL,
             delivery_date TEXT,
             old_broadband_contract_period TEXT,
             preferred_time_slot TEXT,
             router_model TEXT NOT NULL,
             requires_installation INTEGER NOT NULL DEFAULT 0,
+            express_delivery INTEGER NOT NULL DEFAULT 0,
             delivery_method TEXT NOT NULL DEFAULT '自行送貨',
             order_reference TEXT,
             status TEXT NOT NULL DEFAULT '自行送貨',
+            engineer_level TEXT NOT NULL DEFAULT '初級',
+            engineering_blocked INTEGER NOT NULL DEFAULT 0,
             photo_path TEXT,
             remark TEXT,
             created_at TEXT NOT NULL
@@ -180,13 +186,17 @@ def init_db() -> None:
     }
     required_router_columns = {
         "contact_person": "TEXT",
+        "contact_phone": "TEXT",
         "delivery_date": "TEXT",
         "old_broadband_contract_period": "TEXT",
         "preferred_time_slot": "TEXT",
         "requires_installation": "INTEGER NOT NULL DEFAULT 0",
+        "express_delivery": "INTEGER NOT NULL DEFAULT 0",
         "delivery_method": "TEXT NOT NULL DEFAULT '自行送貨'",
         "order_reference": "TEXT",
         "status": "TEXT NOT NULL DEFAULT '自行送貨'",
+        "engineer_level": "TEXT NOT NULL DEFAULT '初級'",
+        "engineering_blocked": "INTEGER NOT NULL DEFAULT 0",
         "photo_path": "TEXT",
         "remark": "TEXT",
     }
@@ -436,11 +446,14 @@ def build_router_delivery_filters(args) -> tuple[str, list[Any]]:
     phone_number = args.get("phone_number", "").strip()
     customer_name = args.get("customer_name", "").strip()
     delivery_date = args.get("delivery_date", "").strip()
-    status = args.get("status", "").strip()
     delivery_method = args.get("delivery_method", "").strip()
     router_model = args.get("router_model", "").strip()
     requires_installation = args.get("requires_installation", "").strip()
+    express_delivery = args.get("express_delivery", "").strip()
     old_broadband_contract_period = args.get("old_broadband_contract_period", "").strip()
+    contact_phone = args.get("contact_phone", "").strip()
+    engineer_level = args.get("engineer_level", "").strip()
+    engineering_blocked = args.get("engineering_blocked", "").strip()
     remark = args.get("remark", "").strip()
     sort_delivery_date = args.get("sort_delivery_date", "").strip()
     sort_contract_period = args.get("sort_contract_period", "").strip()
@@ -451,12 +464,12 @@ def build_router_delivery_filters(args) -> tuple[str, list[Any]]:
     if customer_name:
         query += " AND customer_name LIKE ?"
         params.append(f"%{customer_name}%")
+    if contact_phone:
+        query += " AND contact_phone LIKE ?"
+        params.append(f"%{contact_phone}%")
     if delivery_date:
         query += " AND delivery_date = ?"
         params.append(delivery_date)
-    if status in DELIVERY_STATUS_OPTIONS:
-        query += " AND status = ?"
-        params.append(status)
     if delivery_method in DELIVERY_STATUS_OPTIONS:
         query += " AND delivery_method = ?"
         params.append(delivery_method)
@@ -466,6 +479,15 @@ def build_router_delivery_filters(args) -> tuple[str, list[Any]]:
     if requires_installation in {"0", "1"}:
         query += " AND requires_installation = ?"
         params.append(int(requires_installation))
+    if express_delivery in {"0", "1"}:
+        query += " AND express_delivery = ?"
+        params.append(int(express_delivery))
+    if engineer_level in ENGINEER_LEVEL_OPTIONS:
+        query += " AND engineer_level = ?"
+        params.append(engineer_level)
+    if engineering_blocked in {"0", "1"}:
+        query += " AND engineering_blocked = ?"
+        params.append(int(engineering_blocked))
     if old_broadband_contract_period:
         query += " AND old_broadband_contract_period LIKE ?"
         params.append(f"%{old_broadband_contract_period}%")
@@ -490,24 +512,29 @@ def insert_router_delivery(data: dict[str, Any]) -> None:
     db.execute(
         """
         INSERT INTO router_deliveries (
-            phone_number, customer_name, contact_person, delivery_address, delivery_date,
+            phone_number, customer_name, contact_person, contact_phone, delivery_address, delivery_date,
             old_broadband_contract_period, preferred_time_slot, router_model,
-            requires_installation, delivery_method, order_reference, status, photo_path, remark, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            requires_installation, express_delivery, delivery_method, order_reference, status,
+            engineer_level, engineering_blocked, photo_path, remark, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             data["phone_number"],
             data["customer_name"],
             data.get("contact_person", ""),
+            data.get("contact_phone", ""),
             data["delivery_address"],
             data.get("delivery_date", ""),
             data.get("old_broadband_contract_period", ""),
             data.get("preferred_time_slot", ""),
             data["router_model"],
             data.get("requires_installation", 0),
+            data.get("express_delivery", 0),
             data.get("delivery_method", "自行送貨"),
             data.get("order_reference", ""),
             data.get("status", "自行送貨"),
+            data.get("engineer_level", "初級"),
+            data.get("engineering_blocked", 0),
             data.get("photo_path", ""),
             data.get("remark", "")[:150],
             datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -551,6 +578,14 @@ def parse_date(date_str: str) -> datetime | None:
         return datetime.strptime(date_str, "%Y-%m-%d")
     except ValueError:
         return None
+
+
+def should_remind_within_30_days(contract_date_str: str) -> bool:
+    parsed = parse_date(contract_date_str)
+    if parsed is None:
+        return False
+    days_left = (parsed.date() - datetime.now().date()).days
+    return 0 <= days_left <= 30
 
 
 def build_dashboard_metrics(orders: list[sqlite3.Row]) -> dict[str, Any]:
@@ -1137,12 +1172,15 @@ def router_delivery():
             search_params = {
                 "phone_number": request.form.get("phone_number", "").strip(),
                 "customer_name": request.form.get("customer_name", "").strip(),
+                "contact_phone": request.form.get("contact_phone", "").strip(),
                 "delivery_date": request.form.get("delivery_date", "").strip(),
-                "status": request.form.get("status", "").strip(),
                 "delivery_method": request.form.get("delivery_method", "").strip(),
                 "router_model": request.form.get("router_model", "").strip(),
                 "requires_installation": "1" if request.form.get("requires_installation") else "",
+                "express_delivery": "1" if request.form.get("express_delivery") else "",
                 "old_broadband_contract_period": request.form.get("old_broadband_contract_period", "").strip(),
+                "engineer_level": request.form.get("engineer_level", "").strip(),
+                "engineering_blocked": "1" if request.form.get("engineering_blocked") else "",
                 "remark": request.form.get("remark", "").strip(),
                 "sort_delivery_date": "1" if request.form.get("sort_delivery_date") else "",
                 "sort_contract_period": "1" if request.form.get("sort_contract_period") else "",
@@ -1155,18 +1193,23 @@ def router_delivery():
                 "phone_number": request.form.get("phone_number", "").strip(),
                 "customer_name": request.form.get("customer_name", "").strip(),
                 "contact_person": request.form.get("contact_person", "").strip(),
+                "contact_phone": request.form.get("contact_phone", "").strip(),
                 "delivery_address": request.form.get("delivery_address", "").strip(),
                 "delivery_date": request.form.get("delivery_date", "").strip(),
                 "old_broadband_contract_period": request.form.get("old_broadband_contract_period", "").strip(),
                 "preferred_time_slot": request.form.get("preferred_time_slot", "").strip(),
                 "router_model": request.form.get("router_model", "").strip(),
                 "requires_installation": 1 if request.form.get("requires_installation") else 0,
+                "express_delivery": 1 if request.form.get("express_delivery") else 0,
                 "delivery_method": request.form.get("delivery_method", "").strip() or "自行送貨",
                 "order_reference": request.form.get("order_reference", "").strip(),
-                "status": request.form.get("status", "").strip() or "自行送貨",
+                "status": "自行送貨",
+                "engineer_level": request.form.get("engineer_level", "").strip() or "初級",
+                "engineering_blocked": 1 if request.form.get("engineering_blocked") else 0,
                 "photo_path": "",
                 "remark": request.form.get("remark", "").strip()[:150],
             }
+            reminder_30_days_enabled = bool(request.form.get("reminder_30_days"))
             photo_file = request.files.get("delivery_photo")
             form_data["photo_path"] = save_uploaded_photo(photo_file)
             if photo_file and photo_file.filename and not form_data["photo_path"]:
@@ -1180,8 +1223,8 @@ def router_delivery():
                 or not form_data["delivery_date"]
                 or not form_data["old_broadband_contract_period"]
                 or form_data["router_model"] not in ROUTER_MODEL_OPTIONS
-                or form_data["status"] not in DELIVERY_STATUS_OPTIONS
                 or form_data["delivery_method"] not in DELIVERY_STATUS_OPTIONS
+                or form_data["engineer_level"] not in ENGINEER_LEVEL_OPTIONS
             ):
                 flash("請填妥必要欄位（電話、客戶、地址、送貨日期、舊有寬頻合約期）。", "danger")
                 return redirect(url_for("router_delivery", **request.args.to_dict(flat=False)))
@@ -1192,6 +1235,10 @@ def router_delivery():
 
             insert_router_delivery(form_data)
             flash("已新增 5G Router 送貨記錄。", "success")
+            if reminder_30_days_enabled and should_remind_within_30_days(form_data["old_broadband_contract_period"]):
+                flash("智能提示：此客戶舊約期 30 日內到期，請安排主動跟進。", "warning")
+            if form_data["engineering_blocked"]:
+                flash("工程提示：已標記為「有阻塞」，請工程人員優先處理。", "warning")
             return redirect(url_for("router_delivery", **request.args.to_dict(flat=False)))
 
         flash("不支援的操作。", "danger")
@@ -1206,6 +1253,7 @@ def router_delivery():
         router_model_options=ROUTER_MODEL_OPTIONS,
         delivery_time_slots=DELIVERY_TIME_SLOT_OPTIONS,
         delivery_status_options=DELIVERY_STATUS_OPTIONS,
+        engineer_level_options=ENGINEER_LEVEL_OPTIONS,
     )
 
 
@@ -1222,18 +1270,23 @@ def edit_router_delivery(delivery_id: int):
             "phone_number": request.form.get("phone_number", "").strip(),
             "customer_name": request.form.get("customer_name", "").strip(),
             "contact_person": request.form.get("contact_person", "").strip(),
+            "contact_phone": request.form.get("contact_phone", "").strip(),
             "delivery_address": request.form.get("delivery_address", "").strip(),
             "delivery_date": request.form.get("delivery_date", "").strip(),
             "old_broadband_contract_period": request.form.get("old_broadband_contract_period", "").strip(),
             "preferred_time_slot": request.form.get("preferred_time_slot", "").strip(),
             "router_model": request.form.get("router_model", "").strip(),
             "requires_installation": 1 if request.form.get("requires_installation") else 0,
+            "express_delivery": 1 if request.form.get("express_delivery") else 0,
             "delivery_method": request.form.get("delivery_method", "").strip(),
             "order_reference": request.form.get("order_reference", "").strip(),
-            "status": request.form.get("status", "").strip(),
+            "status": "自行送貨",
+            "engineer_level": request.form.get("engineer_level", "").strip() or "初級",
+            "engineering_blocked": 1 if request.form.get("engineering_blocked") else 0,
             "photo_path": delivery["photo_path"] or "",
             "remark": request.form.get("remark", "").strip()[:150],
         }
+        reminder_30_days_enabled = bool(request.form.get("reminder_30_days"))
         photo_file = request.files.get("delivery_photo")
         new_photo_path = save_uploaded_photo(photo_file)
         if photo_file and photo_file.filename and not new_photo_path:
@@ -1245,6 +1298,7 @@ def edit_router_delivery(delivery_id: int):
                 router_model_options=ROUTER_MODEL_OPTIONS,
                 delivery_time_slots=DELIVERY_TIME_SLOT_OPTIONS,
                 delivery_status_options=DELIVERY_STATUS_OPTIONS,
+                engineer_level_options=ENGINEER_LEVEL_OPTIONS,
             )
         if new_photo_path:
             form_data["photo_path"] = new_photo_path
@@ -1255,8 +1309,8 @@ def edit_router_delivery(delivery_id: int):
             or not form_data["delivery_date"]
             or not form_data["old_broadband_contract_period"]
             or form_data["router_model"] not in ROUTER_MODEL_OPTIONS
-            or form_data["status"] not in DELIVERY_STATUS_OPTIONS
             or form_data["delivery_method"] not in DELIVERY_STATUS_OPTIONS
+            or form_data["engineer_level"] not in ENGINEER_LEVEL_OPTIONS
         ):
             flash("資料不完整或包含無效欄位，請檢查後重試。", "danger")
             return render_template(
@@ -1266,6 +1320,7 @@ def edit_router_delivery(delivery_id: int):
                 router_model_options=ROUTER_MODEL_OPTIONS,
                 delivery_time_slots=DELIVERY_TIME_SLOT_OPTIONS,
                 delivery_status_options=DELIVERY_STATUS_OPTIONS,
+                engineer_level_options=ENGINEER_LEVEL_OPTIONS,
             )
 
         if form_data["preferred_time_slot"] and form_data["preferred_time_slot"] not in DELIVERY_TIME_SLOT_OPTIONS:
@@ -1277,6 +1332,7 @@ def edit_router_delivery(delivery_id: int):
                 router_model_options=ROUTER_MODEL_OPTIONS,
                 delivery_time_slots=DELIVERY_TIME_SLOT_OPTIONS,
                 delivery_status_options=DELIVERY_STATUS_OPTIONS,
+                engineer_level_options=ENGINEER_LEVEL_OPTIONS,
             )
 
         db = get_db()
@@ -1285,7 +1341,9 @@ def edit_router_delivery(delivery_id: int):
             UPDATE router_deliveries
             SET phone_number = ?, customer_name = ?, delivery_address = ?, delivery_date = ?,
                 old_broadband_contract_period = ?, preferred_time_slot = ?, router_model = ?,
-                requires_installation = ?, contact_person = ?, delivery_method = ?, order_reference = ?, status = ?, photo_path = ?, remark = ?
+                requires_installation = ?, express_delivery = ?, contact_person = ?, contact_phone = ?,
+                delivery_method = ?, order_reference = ?, status = ?, engineer_level = ?,
+                engineering_blocked = ?, photo_path = ?, remark = ?
             WHERE id = ?
             """,
             (
@@ -1297,10 +1355,14 @@ def edit_router_delivery(delivery_id: int):
                 form_data["preferred_time_slot"],
                 form_data["router_model"],
                 form_data["requires_installation"],
+                form_data["express_delivery"],
                 form_data["contact_person"],
+                form_data["contact_phone"],
                 form_data["delivery_method"],
                 form_data["order_reference"],
                 form_data["status"],
+                form_data["engineer_level"],
+                form_data["engineering_blocked"],
                 form_data["photo_path"],
                 form_data["remark"],
                 delivery_id,
@@ -1308,6 +1370,10 @@ def edit_router_delivery(delivery_id: int):
         )
         db.commit()
         flash("送貨記錄已更新。", "success")
+        if reminder_30_days_enabled and should_remind_within_30_days(form_data["old_broadband_contract_period"]):
+            flash("智能提示：此客戶舊約期 30 日內到期，請安排主動跟進。", "warning")
+        if form_data["engineering_blocked"]:
+            flash("工程提示：已標記為「有阻塞」，請工程人員優先處理。", "warning")
         return redirect(url_for("router_delivery"))
 
     return render_template(
@@ -1317,7 +1383,37 @@ def edit_router_delivery(delivery_id: int):
         router_model_options=ROUTER_MODEL_OPTIONS,
         delivery_time_slots=DELIVERY_TIME_SLOT_OPTIONS,
         delivery_status_options=DELIVERY_STATUS_OPTIONS,
+        engineer_level_options=ENGINEER_LEVEL_OPTIONS,
     )
+
+
+@app.get("/router-delivery/export-whatsapp")
+@login_required
+def export_router_delivery_whatsapp():
+    query, params = build_router_delivery_filters(request.args)
+    db = get_db()
+    deliveries = db.execute(query, params).fetchall()
+    if not deliveries:
+        flash("沒有可匯出的送貨記錄。", "warning")
+        return redirect(url_for("router_delivery", **request.args.to_dict(flat=False)))
+
+    lines = ["送貨列表匯出"]
+    for index, item in enumerate(deliveries, start=1):
+        lines.extend(
+            [
+                "",
+                f"{index}. 客戶：{item['customer_name']}",
+                f"登記號碼：{item['phone_number']}",
+                f"聯絡電話：{item['contact_phone'] or item['phone_number']}",
+                f"送貨日期：{item['delivery_date'] or '-'}",
+                f"送貨時段：{item['preferred_time_slot'] or '-'}",
+                f"地址：{item['delivery_address']}",
+                f"工程級數：{item['engineer_level'] or '初級'}",
+                f"工程阻塞：{'有阻塞' if item['engineering_blocked'] else '正常'}",
+            ]
+        )
+    message = "\n".join(lines)
+    return redirect(f"https://wa.me/?text={quote_plus(message)}")
 
 
 @app.post("/router-delivery/<int:delivery_id>/delete")
