@@ -8,6 +8,12 @@
       <small class="text-muted">OCR 自動填表 + 排程 + 一鍵 WhatsApp 通知</small>
     </div>
 
+<style>
+  .ui-hidden-field {
+    display: none !important;
+  }
+</style>
+
     <form method="post" enctype="multipart/form-data" class="row g-3 align-items-end" id="router-delivery-form">
       <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
 
@@ -39,7 +45,7 @@
               <label class="form-label">客戶姓名（登記名稱）*</label>
               <input type="text" class="form-control" id="customer_name" name="customer_name" value="{{ request.args.get('customer_name','') }}">
             </div>
-            <div class="col-12 col-lg-3">
+            <div class="col-12 col-lg-3 ui-hidden-field">
               <label class="form-label">登記服務號碼</label>
               <input type="text" class="form-control" id="registration_service_number" name="registration_service_number" value="{{ request.args.get('registration_service_number','') }}">
             </div>
@@ -47,7 +53,7 @@
               <label class="form-label">Sssa Number</label>
               <input type="text" class="form-control" id="sssa_number" name="sssa_number" value="{{ request.args.get('sssa_number','') }}">
             </div>
-            <div class="col-12 col-lg-6">
+            <div class="col-12 col-lg-6 ui-hidden-field">
               <label class="form-label">客戶地址（合約地址）</label>
               <textarea class="form-control" id="customer_address" name="customer_address" rows="2" placeholder="OCR 會優先填此欄">{{ request.args.get('customer_address','') }}</textarea>
             </div>
@@ -63,7 +69,7 @@
               <label class="form-label">送貨日期 *</label>
               <input type="date" class="form-control" id="delivery_date" name="delivery_date" value="{{ request.args.get('delivery_date','') }}">
             </div>
-            <div class="col-12 col-lg-2">
+            <div class="col-12 col-lg-2 ui-hidden-field">
               <label class="form-label">舊有寬頻合約期 *</label>
               <input type="date" class="form-control" name="old_broadband_contract_period" value="{{ request.args.get('old_broadband_contract_period','') }}">
             </div>
@@ -86,7 +92,7 @@
               </select>
             </div>
 
-            <div class="col-12 col-lg-3">
+            <div class="col-12 col-lg-3 ui-hidden-field">
               <label class="form-label">送貨方式 *</label>
               <select class="form-select" name="delivery_method">
                 <option value="">全部方式</option>
@@ -95,7 +101,7 @@
                 {% endfor %}
               </select>
             </div>
-            <div class="col-12 col-lg-3">
+            <div class="col-12 col-lg-3 ui-hidden-field">
               <label class="form-label">工程師級數</label>
               <select class="form-select" name="engineer_level">
                 <option value="">全部級數</option>
@@ -104,7 +110,7 @@
                 {% endfor %}
               </select>
             </div>
-            <div class="col-12 col-lg-3">
+            <div class="col-12 col-lg-3 ui-hidden-field">
               <label class="form-label">排序方式</label>
               <select class="form-select" name="sort_by">
                 <option value="created_at_desc" {% if request.args.get('sort_by','created_at_desc') == 'created_at_desc' %}selected{% endif %}>最新建立</option>
@@ -114,20 +120,20 @@
                 <option value="contract_period_desc" {% if request.args.get('sort_by','') == 'contract_period_desc' %}selected{% endif %}>舊約期（遠至近）</option>
               </select>
             </div>
-            <div class="col-12 col-lg-3">
+            <div class="col-12 col-lg-3 ui-hidden-field">
               <label class="form-label">聯絡人</label>
               <input type="text" class="form-control" name="contact_person" placeholder="例如：陳生">
             </div>
 
-            <div class="col-12 col-lg-3">
+            <div class="col-12 col-lg-3 ui-hidden-field">
               <label class="form-label">單號碼</label>
               <input type="text" class="form-control" name="order_reference" placeholder="例如：R20260319-001">
             </div>
-            <div class="col-12 col-lg-3">
+            <div class="col-12 col-lg-3 ui-hidden-field">
               <label class="form-label">現場相片（相機）</label>
               <input type="file" class="form-control" name="delivery_photo" accept="image/*" capture="environment">
             </div>
-            <div class="col-12 col-lg-3">
+            <div class="col-12 col-lg-3 ui-hidden-field">
               <div class="form-check mt-4">
                 <input class="form-check-input" type="checkbox" value="1" id="requires-installation" name="requires_installation" {% if request.args.get('requires_installation','') == '1' %}checked{% endif %}>
                 <label class="form-check-label" for="requires-installation">需要上門安裝</label>
@@ -142,7 +148,7 @@
               </div>
             </div>
 
-            <div class="col-12">
+            <div class="col-12 ui-hidden-field">
               <label class="form-label">備註（最多 150 字）</label>
               <textarea class="form-control" name="remark" rows="2" maxlength="150">{{ request.args.get('remark','') }}</textarea>
               <div class="form-check mt-2">
@@ -295,7 +301,6 @@
     const customerName = encodedValue(getFieldValue('customer_name'));
     const contactPhone = encodedValue(getFieldValue('contact_phone') || getFieldValue('phone_number'));
     const broadbandNumber = encodedValue(getFieldValue('broadband_number'));
-    const registrationServiceNumber = encodedValue(getFieldValue('registration_service_number'));
     const ssaNumber = encodedValue(getFieldValue('sssa_number'));
     const deliveryAddress = encodedValue(getFieldValue('delivery_address'));
 
@@ -305,9 +310,7 @@
       `${encodeURIComponent('安排送貨日期: ')}${deliveryDate}${encodeURIComponent(' (')}${preferredTimeSlot}${encodeURIComponent(')')}`,
       '',
       customerName,
-      `${encodeURIComponent('聯絡電話: ')}${contactPhone}`,
-      `${encodeURIComponent('寬頻號碼: ')}${broadbandNumber}`,
-      `${encodeURIComponent('登記服務號碼: ')}${registrationServiceNumber}`,
+      `${encodeURIComponent('聯絡電話: ')}${contactPhone}%0A${encodeURIComponent('寬頻號碼: ')}${broadbandNumber}`,
       `${encodeURIComponent('Ssa no: ')}${ssaNumber}`,
       encodeURIComponent('送貨地址 :'),
       deliveryAddress,
@@ -398,20 +401,22 @@
         phone_number: 'phone_number',
         contact_phone: 'contact_phone',
         broadband_number: 'broadband_number',
-        customer_address: 'customer_address',
-        delivery_address: 'delivery_address',
         registration_service_number: 'registration_service_number',
         sssa_number: 'sssa_number',
       };
 
       Object.entries(mapping).forEach(([fieldName, key]) => {
         const el = form.querySelector(`[name="${fieldName}"]`);
-        if (el && fields[key]) {
-          if (!el.value || fieldName === 'delivery_address') {
-            el.value = fields[key];
-          }
+        if (el && fields[key] && !el.value) {
+          el.value = fields[key];
         }
       });
+
+      const deliveryAddressField = form.querySelector('[name="delivery_address"]');
+      const ocrAddress = fields.delivery_address || fields.customer_address;
+      if (deliveryAddressField && ocrAddress) {
+        deliveryAddressField.value = ocrAddress;
+      }
       setStatus('OCR 完成，已嘗試自動填表。');
       saveDraft();
     } catch (error) {
