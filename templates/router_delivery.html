@@ -25,31 +25,31 @@
             </div>
             <div class="col-12 col-lg-2">
               <label class="form-label">登記號碼 *</label>
-              <input type="tel" class="form-control" name="phone_number" value="{{ request.args.get('phone_number','') }}" placeholder="客戶電話">
+              <input type="tel" class="form-control" id="phone_number" name="phone_number" value="{{ request.args.get('phone_number','') }}" placeholder="客戶電話">
             </div>
             <div class="col-12 col-lg-2">
               <label class="form-label">聯絡電話</label>
-              <input type="tel" class="form-control" name="contact_phone" value="{{ request.args.get('contact_phone','') }}" placeholder="可不同">
+              <input type="tel" class="form-control" id="contact_phone" name="contact_phone" value="{{ request.args.get('contact_phone','') }}" placeholder="可不同">
             </div>
             <div class="col-12 col-lg-2">
               <label class="form-label">寬頻號碼</label>
-              <input type="text" class="form-control" name="broadband_number" value="{{ request.args.get('broadband_number','') }}">
+              <input type="text" class="form-control" id="broadband_number" name="broadband_number" value="{{ request.args.get('broadband_number','') }}">
             </div>
             <div class="col-12 col-lg-2">
               <label class="form-label">客戶姓名（登記名稱）*</label>
-              <input type="text" class="form-control" name="customer_name" value="{{ request.args.get('customer_name','') }}">
+              <input type="text" class="form-control" id="customer_name" name="customer_name" value="{{ request.args.get('customer_name','') }}">
             </div>
             <div class="col-12 col-lg-3">
               <label class="form-label">登記服務號碼</label>
-              <input type="text" class="form-control" name="registration_service_number" value="{{ request.args.get('registration_service_number','') }}">
+              <input type="text" class="form-control" id="registration_service_number" name="registration_service_number" value="{{ request.args.get('registration_service_number','') }}">
             </div>
             <div class="col-12 col-lg-3">
               <label class="form-label">Sssa Number</label>
-              <input type="text" class="form-control" name="sssa_number" value="{{ request.args.get('sssa_number','') }}">
+              <input type="text" class="form-control" id="sssa_number" name="sssa_number" value="{{ request.args.get('sssa_number','') }}">
             </div>
             <div class="col-12 col-lg-6">
               <label class="form-label">客戶地址（合約地址）</label>
-              <textarea class="form-control" name="customer_address" rows="2" placeholder="OCR 會優先填此欄">{{ request.args.get('customer_address','') }}</textarea>
+              <textarea class="form-control" id="customer_address" name="customer_address" rows="2" placeholder="OCR 會優先填此欄">{{ request.args.get('customer_address','') }}</textarea>
             </div>
 
             <div class="col-12"><hr class="my-1"></div>
@@ -57,11 +57,11 @@
 
             <div class="col-12 col-lg-4">
               <label class="form-label">送貨地址 *</label>
-              <textarea class="form-control" name="delivery_address" rows="2" placeholder="可同客戶地址">{{ request.args.get('delivery_address','') }}</textarea>
+              <textarea class="form-control" id="delivery_address" name="delivery_address" rows="2" placeholder="可同客戶地址">{{ request.args.get('delivery_address','') }}</textarea>
             </div>
             <div class="col-12 col-lg-2">
               <label class="form-label">送貨日期 *</label>
-              <input type="date" class="form-control" name="delivery_date" value="{{ request.args.get('delivery_date','') }}">
+              <input type="date" class="form-control" id="delivery_date" name="delivery_date" value="{{ request.args.get('delivery_date','') }}">
             </div>
             <div class="col-12 col-lg-2">
               <label class="form-label">舊有寬頻合約期 *</label>
@@ -69,7 +69,7 @@
             </div>
             <div class="col-12 col-lg-2">
               <label class="form-label">送貨時段（工程）</label>
-              <select class="form-select" name="preferred_time_slot">
+              <select class="form-select" id="preferred_time_slot" name="preferred_time_slot">
                 <option value="">不限</option>
                 {% for option in delivery_time_slots %}
                 <option value="{{ option }}">{{ option }}</option>
@@ -78,7 +78,7 @@
             </div>
             <div class="col-12 col-lg-2">
               <label class="form-label">Router 型號 *</label>
-              <select class="form-select" name="router_model">
+              <select class="form-select" id="router_model" name="router_model">
                 <option value="">請選擇型號</option>
                 {% for option in router_model_options %}
                 <option value="{{ option }}" {% if request.args.get('router_model','') == option %}selected{% endif %}>{{ option }}</option>
@@ -264,30 +264,54 @@
     return `${Number(day)}/${Number(month)}/${year}`;
   };
 
-  const getFieldValue = (fieldName) => form.querySelector(`[name="${fieldName}"]`)?.value?.trim() || '';
+  const fieldIdMap = {
+    customer_name: 'customer_name',
+    contact_phone: 'contact_phone',
+    phone_number: 'phone_number',
+    broadband_number: 'broadband_number',
+    registration_service_number: 'registration_service_number',
+    sssa_number: 'sssa_number',
+    delivery_address: 'delivery_address',
+    router_model: 'router_model',
+    delivery_date: 'delivery_date',
+    preferred_time_slot: 'preferred_time_slot',
+  };
+
+  const getFieldValue = (fieldName) => {
+    const fieldId = fieldIdMap[fieldName];
+    if (fieldId) {
+      const el = document.getElementById(fieldId);
+      if (el?.value) return el.value.trim();
+    }
+    return form.querySelector(`[name="${fieldName}"]`)?.value?.trim() || '';
+  };
+
+  const encodedValue = (value) => encodeURIComponent(value || '-');
 
   const buildMessage = () => {
-    const routerModel = getFieldValue('router_model');
-    const deliveryDate = formatDateForMessage(getFieldValue('delivery_date'));
-    const preferredTimeSlot = getFieldValue('preferred_time_slot');
-    const customerName = getFieldValue('customer_name');
-    const contactPhone = getFieldValue('contact_phone') || getFieldValue('phone_number');
-    const broadbandNumber = getFieldValue('broadband_number') || contactPhone;
-    const ssaNumber = getFieldValue('sssa_number');
-    const deliveryAddress = getFieldValue('delivery_address');
+    const routerModel = encodedValue(getFieldValue('router_model'));
+    const deliveryDate = encodedValue(formatDateForMessage(getFieldValue('delivery_date')));
+    const preferredTimeSlot = encodedValue(getFieldValue('preferred_time_slot'));
+    const customerName = encodedValue(getFieldValue('customer_name'));
+    const contactPhone = encodedValue(getFieldValue('contact_phone') || getFieldValue('phone_number'));
+    const broadbandNumber = encodedValue(getFieldValue('broadband_number'));
+    const registrationServiceNumber = encodedValue(getFieldValue('registration_service_number'));
+    const ssaNumber = encodedValue(getFieldValue('sssa_number'));
+    const deliveryAddress = encodedValue(getFieldValue('delivery_address'));
 
     return [
-      `速遞 Router (${routerModel})`,
+      `${encodeURIComponent('速遞 Router (')}${routerModel}${encodeURIComponent(')')}`,
       '',
-      `安排送貨日期: ${deliveryDate} (${preferredTimeSlot})`,
+      `${encodeURIComponent('安排送貨日期: ')}${deliveryDate}${encodeURIComponent(' (')}${preferredTimeSlot}${encodeURIComponent(')')}`,
       '',
       customerName,
-      `聯絡電話: ${contactPhone}`,
-      `寬頻號碼: ${broadbandNumber}`,
-      `Ssa no: ${ssaNumber}`,
-      '送貨地址 :',
+      `${encodeURIComponent('聯絡電話: ')}${contactPhone}`,
+      `${encodeURIComponent('寬頻號碼: ')}${broadbandNumber}`,
+      `${encodeURIComponent('登記服務號碼: ')}${registrationServiceNumber}`,
+      `${encodeURIComponent('Ssa no: ')}${ssaNumber}`,
+      encodeURIComponent('送貨地址 :'),
       deliveryAddress,
-    ].join('\n');
+    ].join('%0A');
   };
 
   const validateMessageFields = () => {
@@ -400,9 +424,8 @@
   bossWaGenerateButton?.addEventListener('click', () => {
     try {
       validateMessageFields();
-      const message = buildMessage();
-      const encoded = encodeURIComponent(message);
-      window.open(`https://wa.me/${SUPERVISOR_PHONE}?text=${encoded}`, '_blank');
+      const encodedMessage = buildMessage();
+      window.open(`https://wa.me/${SUPERVISOR_PHONE}?text=${encodedMessage}`, '_blank');
     } catch (error) {
       window.alert(error.message || '無法產生 WhatsApp 訊息');
     }
