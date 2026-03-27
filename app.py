@@ -84,6 +84,8 @@ MAX_UPLOAD_SIZE_BYTES = 8 * 1024 * 1024
 
 DEMO_USER = os.environ.get("CRM_USERNAME", "admin")
 DEMO_PASSWORD = os.environ.get("CRM_PASSWORD", "password123")
+WHATSAPP_CASE_TYPES = {"CMN", "RENEWAL", "ROUTER", "APPOINTMENT", "TODO"}
+PENDING_WHATSAPP_DRAFTS: dict[str, dict[str, Any]] = {}
 
 
 def read_uploaded_file_bytes(uploaded_file, *, max_size: int = MAX_UPLOAD_SIZE_BYTES) -> tuple[bytes | None, str]:
@@ -275,6 +277,8 @@ def login_required(view):
 @app.before_request
 def csrf_protect() -> None:
     if request.method != "POST":
+        return
+    if request.path == "/webhook":
         return
 
     token = request.form.get("_csrf_token") or request.headers.get("X-CSRF-Token")
@@ -924,6 +928,112 @@ def build_dashboard_order_data(form) -> dict[str, Any]:
         "replacement_date": form.get("replacement_date", "").strip(),
         "remark": form.get("remark", "").strip()[:100],
     }
+
+
+def detect_case_type(text: str) -> str:
+    upper_text = text.upper()
+    if any(token in upper_text for token in ["ROUTER", "寬頻", "送貨"]):
+        return "ROUTER"
+    if any(token in upper_text for token in ["APPOINTMENT", "預約"]):
+        return "APPOINTMENT"
+    if any(token in upper_text for token in ["RENEW", "續約"]):
+        return "RENEWAL"
+    if any(token in upper_text for token in ["TODO", "待辦"]):
+        return "TODO"
+    return "CMN"
+
+
+def extract_fields_from_text(text: str, case_type: str) -> dict[str, str]:
+    normalized_case_type = case_type if case_type in WHATSAPP_CASE_TYPES else "CMN"
+    phone_match = re.search(r"(?<!\d)(\d{8})(?!\d)", text)
+    fields: dict[str, str] = {
+        "case_type": normalized_case_type,
+        "phone_number": phone_match.group(1) if phone_match else "",
+        "remark": text.strip(),
+    }
+    if normalized_case_type == "ROUTER":
+        address_match = re.search(r"(?:地址|ADDRESS)\s*[:：]\s*(.+)", text, flags=re.IGNORECASE)
+        fields["delivery_address"] = address_match.group(1).strip() if address_match else ""
+    return fields
+
+
+def extract_fields_from_ai_text(text: str) -> dict[str, Any] | None:
+    """
+    OCR / 路由器專用 AI 解析器；不覆蓋 `extract_fields_from_text(text, case_type)` 合約。
+    支援 JSON 片段，如：
+    {"case_type":"ROUTER","fields":{"phone_number":"91234567"}}
+    """
+    json_match = re.search(r"\{[\s\S]*\}", text)
+    if not json_match:
+        return None
+    try:
+        import json
+
+        payload = json.loads(json_match.group(0))
+    except Exception:
+        return None
+
+    case_type = str(payload.get("case_type", "")).upper().strip()
+    if case_type not in WHATSAPP_CASE_TYPES:
+        return None
+    fields = payload.get("fields")
+    if not isinstance(fields, dict):
+        return None
+    return {"case_type": case_type, "fields": {str(k): str(v) for k, v in fields.items()}}
+
+
+def save_pending_draft(sender: str, case_type: str, fields: dict[str, Any], raw_text: str = "") -> None:
+    PENDING_WHATSAPP_DRAFTS[sender] = {
+        "case_type": case_type if case_type in WHATSAPP_CASE_TYPES else "CMN",
+        "fields": fields,
+        "raw_text": raw_text,
+        "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    }
+
+
+def build_preview(case_type: str, fields: dict[str, Any]) -> str:
+    lines = [f"已建立草稿（{case_type}）", "資料預覽："]
+    for key, value in fields.items():
+        if value:
+            lines.append(f"- {key}: {value}")
+    lines.append("如資料正確，請回覆 /確認")
+    return "\n".join(lines)
+
+
+def is_command_message(text: str) -> bool:
+    stripped = text.strip()
+    return stripped.startswith("/")
+
+
+def handle_whatsapp_command(sender: str, command_text: str) -> str:
+    command = command_text.strip().split()[0]
+    if command == "/確認":
+        draft = PENDING_WHATSAPP_DRAFTS.pop(sender, None)
+        if not draft:
+            return "未找到待確認草稿。"
+        return f"已確認並儲存：{draft['case_type']}"
+    return "未支援的指令。"
+
+
+@app.post("/webhook")
+def webhook():
+    body = (request.form.get("Body") or "").strip()
+    sender = (request.form.get("From") or "anonymous").strip()
+
+    if is_command_message(body):
+        return Response(handle_whatsapp_command(sender, body), mimetype="text/plain")
+
+    ai_result = extract_fields_from_ai_text(body)
+    if ai_result is None:
+        case_type = detect_case_type(body)
+        ai_result = {"case_type": case_type, "fields": extract_fields_from_text(body, case_type)}
+
+    case_type = ai_result["case_type"]
+    if case_type not in WHATSAPP_CASE_TYPES:
+        case_type = "CMN"
+    fields = ai_result.get("fields", {})
+    save_pending_draft(sender, case_type, fields, raw_text=body)
+    return Response(build_preview(case_type, fields), mimetype="text/plain")
 
 
 @app.route("/")
